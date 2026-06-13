@@ -1,8 +1,7 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 
-import 'pages/app_shell.dart';
+import 'pages/login_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -11,14 +10,15 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'UniMove',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: .fromSeed(seedColor: const Color(0xFF1E104E)),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF1E104E),
+        ),
         useMaterial3: true,
       ),
       home: const SplashScreen(),
@@ -49,24 +49,35 @@ class _SplashScreenState extends State<SplashScreen>
       duration: const Duration(milliseconds: 900),
     )..forward();
 
-    _fadeIn = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+    _fadeIn = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+    );
+
     _scale = Tween<double>(
       begin: 0.95,
       end: 1,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
+    ).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutBack,
+      ),
+    );
 
     _timer = Timer(const Duration(milliseconds: 2200), () {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       Navigator.of(context).pushReplacement(
         PageRouteBuilder<void>(
           pageBuilder: (context, animation, secondaryAnimation) {
-            return const AppShell();
+            return const LoginPage();
           },
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
+          transitionsBuilder:
+              (context, animation, secondaryAnimation, child) {
+            return FadeTransition(
+              opacity: animation,
+              child: child,
+            );
           },
           transitionDuration: const Duration(milliseconds: 450),
         ),
@@ -103,7 +114,6 @@ class _SplashScreenState extends State<SplashScreen>
                     key: const Key('unimove-splash-logo'),
                     width: logoWidth,
                     fit: BoxFit.contain,
-                    filterQuality: FilterQuality.high,
                   ),
                 ),
               ),
@@ -120,7 +130,9 @@ class _SplashAccentBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(painter: _SplashAccentPainter());
+    return CustomPaint(
+      painter: _SplashAccentPainter(),
+    );
   }
 }
 
