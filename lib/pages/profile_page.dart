@@ -14,6 +14,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String name = "";
   String email = "";
   String phone = "";
+  String role = "";
 
   @override
   void initState() {
@@ -41,6 +42,7 @@ class _ProfilePageState extends State<ProfilePage> {
         name = result.first['name'] as String;
         email = result.first['email'] as String;
         phone = result.first['phone'] as String;
+        role = result.first['role'] as String;
       });
     }
   }
@@ -101,7 +103,19 @@ class _ProfilePageState extends State<ProfilePage> {
                 ],
               ),
             ),
-
+Container(
+  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+  decoration: BoxDecoration(
+    color: role == "Runner"
+        ? Colors.green
+        : Colors.blue,
+    borderRadius: BorderRadius.circular(20),
+  ),
+  child: Text(
+    role,
+    style: const TextStyle(color: Colors.white),
+  ),
+),
             const SizedBox(height: 25),
 
             // 🔥 INFO SECTION
@@ -163,20 +177,20 @@ class _ProfilePageState extends State<ProfilePage> {
 
                   const SizedBox(height: 30),
                   SizedBox(
-  width: double.infinity,
-  child: ElevatedButton.icon(
-    style: ElevatedButton.styleFrom(
-      backgroundColor: Colors.redAccent,
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-      ),
-    ),
-    onPressed: _logout,
-    icon: const Icon(Icons.logout),
-    label: const Text("Logout"),
-  ),
-),
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      onPressed: _logout,
+                      icon: const Icon(Icons.logout),
+                      label: const Text("Logout"),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -233,18 +247,15 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-    void _logout() async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.clear();
+  void _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
 
-  if (!mounted) return;
+    if (!mounted) return;
 
-  Navigator.pushNamedAndRemoveUntil(
-    context,
-    '/login',
-    (route) => false,
-  );
-}
+    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+  }
+
   void _editProfile() {
     final nameController = TextEditingController(text: name);
     final phoneController = TextEditingController(text: phone);
@@ -304,18 +315,17 @@ class _ProfilePageState extends State<ProfilePage> {
                   controller: phoneController,
                   decoration: const InputDecoration(labelText: "Phone"),
                 ),
-                
+
                 const SizedBox(height: 15),
 
-                 TextField(
-                   controller: passwordController,
-                   obscureText: true,
-                   decoration: const InputDecoration(
-                   labelText: "New Password",
-                   border: OutlineInputBorder(),
-                   ),
-                   ),
-
+                TextField(
+                  controller: passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: "New Password",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
 
                 const SizedBox(height: 25),
 
@@ -336,8 +346,8 @@ class _ProfilePageState extends State<ProfilePage> {
                           email: email,
                           phone: phoneController.text,
                           password: passwordController.text.isEmpty
-                            ? null
-                            : passwordController.text,
+                              ? null
+                              : passwordController.text,
                         );
                       }
 

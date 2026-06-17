@@ -69,7 +69,7 @@ class DatabaseService {
       'created_at': DateTime.now().toIso8601String(),
     });
   }
-  Future<int> insertUser(String name, String email, String password, String phone) async {
+  Future<int> insertUser(String name, String email, String password, String phone, String role) async {
   final db = await database;
 
   return await db.insert(
@@ -79,6 +79,7 @@ class DatabaseService {
       'email': email,
       'password': password,
       'phone': phone,
+      'role': role,
     },
   );
 }
