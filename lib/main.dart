@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
+
 import 'pages/login_page.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
 
@@ -22,6 +24,11 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       home: const SplashScreen(),
+
+      routes: {
+    '/login': (context) => const LoginPage(),
+      },
+  
     );
   }
 }

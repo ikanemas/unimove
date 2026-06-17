@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+
 import '../models/errand.dart';
 
 class DatabaseService {
@@ -23,7 +24,7 @@ class DatabaseService {
     final databasePath = p.join(await getDatabasesPath(), databaseName);
     final openedDatabase = await openDatabase(
       databasePath,
-      version: 1,
+      version: 2,
       onCreate: _seedDatabase,
     );
     _database = openedDatabase;
@@ -68,6 +69,55 @@ class DatabaseService {
       'created_at': DateTime.now().toIso8601String(),
     });
   }
+  Future<int> insertUser(String name, String email, String password, String phone) async {
+  final db = await database;
+
+  return await db.insert(
+    'user',
+    {
+      'name': name,
+      'email': email,
+      'password': password,
+      'phone': phone,
+    },
+  );
+}
+Future<int> updateUser({
+  required int id,
+  required String name,
+  required String email,
+  required String phone,
+  String? password,
+}) async {
+  final db = await database;
+
+  final data = {
+    'name': name,
+    'email': email,
+    'phone': phone,
+  };
+
+  if (password != null && password.isNotEmpty) {
+    data['password'] = password;
+  }
+
+  return await db.update(
+    'user',
+    data,
+    where: 'id = ?',
+    whereArgs: [id],
+  );
+}
+Future<Map<String, Object?>?> getUser() async {
+  final db = await database;
+
+  final result = await db.query('user', limit: 1);
+
+  if (result.isNotEmpty) {
+    return result.first;
+  }
+  return null;
+}
 
   Future<void> _seedDatabase(Database db, int version) async {
     final seedSql = await rootBundle.loadString(seedAssetPath);

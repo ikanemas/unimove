@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import '../services/database_service.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -24,6 +25,9 @@ class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController confirmPasswordController =
       TextEditingController();
 
+  final TextEditingController phoneController =
+      TextEditingController();
+
 
   bool hidePassword = true;
   bool hideConfirmPassword = true;
@@ -39,20 +43,28 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
 
-  void register() {
+void register() async {
+  print("STEP 1: validate form");
 
-    if (_formKey.currentState!.validate()) {
+  if (_formKey.currentState!.validate()) {
+    print("STEP 2: calling database");
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Account Created Successfully"),
-        ),
-      );
+    await DatabaseService.instance.insertUser(
+      nameController.text,
+      emailController.text,
+      passwordController.text,
+      phoneController.text,
+    );
 
-      Navigator.pop(context);
-    }
+    print("STEP 3: user inserted");
 
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Account Created Successfully")),
+    );
+
+    Navigator.pop(context);
   }
+}
 
 
   @override

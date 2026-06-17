@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import 'register_page.dart';
 import 'forgot_password_page.dart';
-import 'app_shell.dart'; // ✅ FIX: missing import
+import 'app_shell.dart'; 
+import '../services/database_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -26,28 +28,42 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  void login() {
-    if (_formKey.currentState!.validate()) {
-      // TODO: Firebase Authentication here
+void login() async {
+  if (_formKey.currentState!.validate()) {
+
+    final db = await DatabaseService.instance.database;
+
+    final result = await db.query(
+      'user',
+      where: 'email = ? AND password = ?',
+      whereArgs: [
+        emailController.text,
+        passwordController.text,
+      ],
+    );
+
+    if (result.isNotEmpty) {
+
+      
+      final prefs = await SharedPreferences.getInstance();
+      prefs.setInt('userId', result.first['id'] as int);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Login Successful"),
-        ),
+        const SnackBar(content: Text("Login Successful")),
       );
 
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const AppShell()),
+      );
 
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const AppShell(),
-          ),
-        );
-      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Invalid email or password")),
+      );
     }
   }
+}
 
   @override
   Widget build(BuildContext context) {
