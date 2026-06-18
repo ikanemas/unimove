@@ -1,14 +1,19 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'pages/login_page.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: 'https://hkyipemvlhqmyhnawkix.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhreWlwZW12bGhxbXlobmF3a2l4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3NzMwMDQsImV4cCI6MjA5NzM0OTAwNH0.YiV8l8M2n-gnJMdTLCgKMCMlj2QVy0mIVUDBceNURM0',
+  );
+
   runApp(const MyApp());
 }
-
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
