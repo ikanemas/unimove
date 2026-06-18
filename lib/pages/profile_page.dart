@@ -50,7 +50,6 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     const primary = Color(0xFF18074d);
-    const secondary = Color(0xFF422a59);
     const accent = Color(0xFFff643d);
     const gold = Color(0xFFffc95c);
 
