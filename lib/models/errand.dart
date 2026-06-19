@@ -9,6 +9,9 @@ class Errand {
     required this.createdAt,
     this.posterId,
     this.posterName,
+    this.runnerId,
+    this.runnerName,
+    this.acceptedAt,
     this.isSeed = false,
   });
 
@@ -21,7 +24,14 @@ class Errand {
   final DateTime createdAt;
   final String? posterId;
   final String? posterName;
+  final String? runnerId;
+  final String? runnerName;
+  final DateTime? acceptedAt;
   final bool isSeed;
+
+  bool get isAssigned => runnerId != null && runnerId!.isNotEmpty;
+  String get displayStatus =>
+      status == 'Open' && isAssigned ? 'Accepted' : status;
 
   factory Errand.fromMap(Map<String, Object?> map) {
     return Errand(
@@ -34,6 +44,11 @@ class Errand {
       createdAt: DateTime.parse(map['created_at'] as String),
       posterId: map['poster_id'] as String?,
       posterName: map['poster_name'] as String?,
+      runnerId: map['runner_id'] as String?,
+      runnerName: map['runner_name'] as String?,
+      acceptedAt: map['accepted_at'] == null
+          ? null
+          : DateTime.parse(map['accepted_at'] as String),
       isSeed: ((map['is_seed'] as int?) ?? 0) == 1,
     );
   }
@@ -49,6 +64,9 @@ class Errand {
       'created_at': createdAt.toIso8601String(),
       'poster_id': posterId,
       'poster_name': posterName,
+      'runner_id': runnerId,
+      'runner_name': runnerName,
+      'accepted_at': acceptedAt?.toIso8601String(),
       'is_seed': isSeed ? 1 : 0,
     };
   }

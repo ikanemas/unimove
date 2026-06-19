@@ -2,18 +2,23 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'pages/app_shell.dart';
 import 'pages/login_page.dart';
+import 'services/database_initializer.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDatabase();
 
   await Supabase.initialize(
     url: 'https://hkyipemvlhqmyhnawkix.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhreWlwZW12bGhxbXlobmF3a2l4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3NzMwMDQsImV4cCI6MjA5NzM0OTAwNH0.YiV8l8M2n-gnJMdTLCgKMCMlj2QVy0mIVUDBceNURM0',
+    anonKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhreWlwZW12bGhxbXlobmF3a2l4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3NzMwMDQsImV4cCI6MjA5NzM0OTAwNH0.YiV8l8M2n-gnJMdTLCgKMCMlj2QVy0mIVUDBceNURM0',
   );
 
   runApp(const MyApp());
 }
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -23,17 +28,12 @@ class MyApp extends StatelessWidget {
       title: 'UniMove',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1E104E),
-        ),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1E104E)),
         useMaterial3: true,
       ),
       home: const SplashScreen(),
 
-      routes: {
-    '/login': (context) => const LoginPage(),
-      },
-  
+      routes: {'/login': (context) => const LoginPage()},
     );
   }
 }
@@ -61,35 +61,26 @@ class _SplashScreenState extends State<SplashScreen>
       duration: const Duration(milliseconds: 900),
     )..forward();
 
-    _fadeIn = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutCubic,
-    );
+    _fadeIn = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
 
     _scale = Tween<double>(
       begin: 0.95,
       end: 1,
-    ).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeOutBack,
-      ),
-    );
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
 
     _timer = Timer(const Duration(milliseconds: 2200), () {
       if (!mounted) return;
 
+      final hasActiveSession =
+          Supabase.instance.client.auth.currentSession != null;
+
       Navigator.of(context).pushReplacement(
         PageRouteBuilder<void>(
           pageBuilder: (context, animation, secondaryAnimation) {
-            return const LoginPage();
+            return hasActiveSession ? const AppShell() : const LoginPage();
           },
-          transitionsBuilder:
-              (context, animation, secondaryAnimation, child) {
-            return FadeTransition(
-              opacity: animation,
-              child: child,
-            );
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
           },
           transitionDuration: const Duration(milliseconds: 450),
         ),
@@ -142,9 +133,7 @@ class _SplashAccentBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _SplashAccentPainter(),
-    );
+    return CustomPaint(painter: _SplashAccentPainter());
   }
 }
 

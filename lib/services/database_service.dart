@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
@@ -13,6 +14,7 @@ class DatabaseService {
   static const String seedAssetPath = 'assets/db/unimove.sql';
 
   Database? _database;
+  final ValueNotifier<int> changes = ValueNotifier<int>(0);
 
   Future<Database> get database async {
     final existingDatabase = _database;
@@ -23,7 +25,7 @@ class DatabaseService {
     final databasePath = p.join(await getDatabasesPath(), databaseName);
     final openedDatabase = await openDatabase(
       databasePath,
-      version: 3,
+      version: 4,
       onCreate: _seedDatabase,
       onUpgrade: _upgradeDatabase,
       onOpen: _ensureSeeded,
@@ -38,6 +40,17 @@ class DatabaseService {
     return rows.map(Errand.fromMap).toList();
   }
 
+  Future<List<Errand>> getOpenErrands() async {
+    final db = await database;
+    final rows = await db.query(
+      'errands',
+      where: 'status = ? AND runner_id IS NULL',
+      whereArgs: ['Open'],
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(Errand.fromMap).toList();
+  }
+
   Future<List<Errand>> getUserPostedErrands(String userId) async {
     final db = await database;
     final rows = await db.query(
@@ -45,6 +58,17 @@ class DatabaseService {
       where: 'is_seed = 0 AND poster_id = ?',
       whereArgs: [userId],
       orderBy: 'created_at DESC',
+    );
+    return rows.map(Errand.fromMap).toList();
+  }
+
+  Future<List<Errand>> getAssignedErrands(String runnerId) async {
+    final db = await database;
+    final rows = await db.query(
+      'errands',
+      where: 'runner_id = ?',
+      whereArgs: [runnerId],
+      orderBy: 'accepted_at DESC, created_at DESC',
     );
     return rows.map(Errand.fromMap).toList();
   }
@@ -74,7 +98,7 @@ class DatabaseService {
     String? posterName,
   }) async {
     final db = await database;
-    return db.insert('errands', {
+    final id = await db.insert('errands', {
       'title': title,
       'reward': reward,
       'description': description,
@@ -85,6 +109,102 @@ class DatabaseService {
       'poster_name': posterName,
       'is_seed': 0,
     });
+    changes.value++;
+    return id;
+  }
+
+  Future<void> updateErrand({
+    required int id,
+    required String posterId,
+    required String title,
+    required double reward,
+    required String description,
+    required String timeToComplete,
+    required String status,
+  }) async {
+    final db = await database;
+    await db.update(
+      'errands',
+      {
+        'title': title,
+        'reward': reward,
+        'description': description,
+        'time_to_complete': timeToComplete,
+        'status': status,
+      },
+      where: 'id = ? AND poster_id = ? AND is_seed = 0',
+      whereArgs: [id, posterId],
+    );
+    changes.value++;
+  }
+
+  Future<void> updateErrandStatus({
+    required int id,
+    required String posterId,
+    required String status,
+  }) async {
+    final db = await database;
+    await db.update(
+      'errands',
+      {'status': status},
+      where: 'id = ? AND poster_id = ? AND is_seed = 0',
+      whereArgs: [id, posterId],
+    );
+    changes.value++;
+  }
+
+  Future<bool> acceptErrand({
+    required int id,
+    required String runnerId,
+    required String runnerName,
+  }) async {
+    final db = await database;
+    final updatedRows = await db.update(
+      'errands',
+      {
+        'runner_id': runnerId,
+        'runner_name': runnerName,
+        'accepted_at': DateTime.now().toIso8601String(),
+      },
+      where: '''
+        id = ?
+        AND status = ?
+        AND runner_id IS NULL
+        AND (poster_id IS NULL OR poster_id != ?)
+      ''',
+      whereArgs: [id, 'Open', runnerId],
+    );
+
+    if (updatedRows > 0) {
+      changes.value++;
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> updateAssignedErrandStatus({
+    required int id,
+    required String runnerId,
+    required String status,
+  }) async {
+    final db = await database;
+    await db.update(
+      'errands',
+      {'status': status},
+      where: 'id = ? AND runner_id = ?',
+      whereArgs: [id, runnerId],
+    );
+    changes.value++;
+  }
+
+  Future<void> deleteErrand({required int id, required String posterId}) async {
+    final db = await database;
+    await db.delete(
+      'errands',
+      where: 'id = ? AND poster_id = ? AND is_seed = 0',
+      whereArgs: [id, posterId],
+    );
+    changes.value++;
   }
 
   Future<int> insertUser(
@@ -161,6 +281,7 @@ class DatabaseService {
     }
 
     await _ensureErrandSeedColumns(db);
+    await _ensureRunnerColumns(db);
     await _markExistingSeedErrands(db);
   }
 
@@ -171,6 +292,7 @@ class DatabaseService {
     }
 
     await _ensureErrandSeedColumns(db);
+    await _ensureRunnerColumns(db);
     await _markExistingSeedErrands(db);
 
     final count = Sqflite.firstIntValue(
@@ -207,6 +329,21 @@ class DatabaseService {
       await db.execute(
         'ALTER TABLE errands ADD COLUMN is_seed INTEGER NOT NULL DEFAULT 0',
       );
+    }
+  }
+
+  Future<void> _ensureRunnerColumns(Database db) async {
+    final columns = await db.rawQuery('PRAGMA table_info(errands)');
+    final columnNames = columns.map((column) => column['name']).toSet();
+
+    if (!columnNames.contains('runner_id')) {
+      await db.execute('ALTER TABLE errands ADD COLUMN runner_id TEXT');
+    }
+    if (!columnNames.contains('runner_name')) {
+      await db.execute('ALTER TABLE errands ADD COLUMN runner_name TEXT');
+    }
+    if (!columnNames.contains('accepted_at')) {
+      await db.execute('ALTER TABLE errands ADD COLUMN accepted_at TEXT');
     }
   }
 

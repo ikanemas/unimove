@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'add_errand_page.dart';
 import 'home_page.dart';
+import 'my_tasks_page.dart';
 import 'profile_page.dart';
 
 class AppShell extends StatefulWidget {
@@ -22,7 +23,7 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    const pages = [HomePage(), AddErrandPage(), ProfilePage()];
+    const pages = [HomePage(), MyTasksPage(), AddErrandPage(), ProfilePage()];
 
     return Scaffold(
       body: IndexedStack(index: _selectedIndex, children: pages),
@@ -36,9 +37,14 @@ class _AppShellState extends State<AppShell> {
             label: 'Home',
           ),
           NavigationDestination(
-            icon: Icon(Icons.add_circle_outline),
-            selectedIcon: Icon(Icons.add_circle),
-            label: 'Add',
+            icon: Icon(Icons.task_outlined),
+            selectedIcon: Icon(Icons.task),
+            label: 'My Tasks',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.assignment_outlined),
+            selectedIcon: Icon(Icons.assignment),
+            label: 'Manage',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),

@@ -42,7 +42,7 @@ class ErrandHistoryPage extends StatelessWidget {
             itemBuilder: (context, index) {
               final errand = errands[index];
 
-              final isDone = errand.status.toLowerCase() == "done";
+              final isDone = errand.status == 'Completed';
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -99,7 +99,7 @@ class ErrandHistoryPage extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
-                                errand.status,
+                                errand.displayStatus,
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 12,

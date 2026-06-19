@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS errands (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   poster_id TEXT,
   poster_name TEXT,
+  runner_id TEXT,
+  runner_name TEXT,
+  accepted_at TEXT,
   is_seed INTEGER NOT NULL DEFAULT 0
 );
 
