@@ -7,6 +7,9 @@ class Errand {
     required this.timeToComplete,
     required this.status,
     required this.createdAt,
+    this.posterId,
+    this.posterName,
+    this.isSeed = false,
   });
 
   final int? id;
@@ -16,6 +19,9 @@ class Errand {
   final String timeToComplete;
   final String status;
   final DateTime createdAt;
+  final String? posterId;
+  final String? posterName;
+  final bool isSeed;
 
   factory Errand.fromMap(Map<String, Object?> map) {
     return Errand(
@@ -26,6 +32,9 @@ class Errand {
       timeToComplete: map['time_to_complete'] as String,
       status: map['status'] as String,
       createdAt: DateTime.parse(map['created_at'] as String),
+      posterId: map['poster_id'] as String?,
+      posterName: map['poster_name'] as String?,
+      isSeed: ((map['is_seed'] as int?) ?? 0) == 1,
     );
   }
 
@@ -38,6 +47,9 @@ class Errand {
       'time_to_complete': timeToComplete,
       'status': status,
       'created_at': createdAt.toIso8601String(),
+      'poster_id': posterId,
+      'poster_name': posterName,
+      'is_seed': isSeed ? 1 : 0,
     };
   }
 }

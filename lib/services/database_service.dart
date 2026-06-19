@@ -23,8 +23,9 @@ class DatabaseService {
     final databasePath = p.join(await getDatabasesPath(), databaseName);
     final openedDatabase = await openDatabase(
       databasePath,
-      version: 2,
+      version: 3,
       onCreate: _seedDatabase,
+      onUpgrade: _upgradeDatabase,
       onOpen: _ensureSeeded,
     );
     _database = openedDatabase;
@@ -34,6 +35,17 @@ class DatabaseService {
   Future<List<Errand>> getErrands() async {
     final db = await database;
     final rows = await db.query('errands', orderBy: 'created_at DESC');
+    return rows.map(Errand.fromMap).toList();
+  }
+
+  Future<List<Errand>> getUserPostedErrands(String userId) async {
+    final db = await database;
+    final rows = await db.query(
+      'errands',
+      where: 'is_seed = 0 AND poster_id = ?',
+      whereArgs: [userId],
+      orderBy: 'created_at DESC',
+    );
     return rows.map(Errand.fromMap).toList();
   }
 
@@ -58,6 +70,8 @@ class DatabaseService {
     required double reward,
     required String description,
     required String timeToComplete,
+    String? posterId,
+    String? posterName,
   }) async {
     final db = await database;
     return db.insert('errands', {
@@ -67,6 +81,9 @@ class DatabaseService {
       'time_to_complete': timeToComplete,
       'status': 'Open',
       'created_at': DateTime.now().toIso8601String(),
+      'poster_id': posterId,
+      'poster_name': posterName,
+      'is_seed': 0,
     });
   }
 
@@ -97,7 +114,7 @@ class DatabaseService {
   }) async {
     final db = await database;
 
-    final data = {
+    final data = <String, Object?>{
       'name': name,
       'email': email,
       'phone': phone,
@@ -107,12 +124,7 @@ class DatabaseService {
       data['password'] = password;
     }
 
-    return await db.update(
-      'user',
-      data,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await db.update('user', data, where: 'id = ?', whereArgs: [id]);
   }
 
   Future<Map<String, Object?>?> getUser() async {
@@ -138,23 +150,84 @@ class DatabaseService {
     }
   }
 
-  Future<void> _ensureSeeded(Database db) async {
-    final tableRows = await db.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
-      ['errands'],
-    );
+  Future<void> _upgradeDatabase(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (!await _errandsTableExists(db)) {
+      await _seedDatabase(db, newVersion);
+      return;
+    }
 
-    if (tableRows.isEmpty) {
+    await _ensureErrandSeedColumns(db);
+    await _markExistingSeedErrands(db);
+  }
+
+  Future<void> _ensureSeeded(Database db) async {
+    if (!await _errandsTableExists(db)) {
       await _seedDatabase(db, 2);
       return;
     }
 
+    await _ensureErrandSeedColumns(db);
+    await _markExistingSeedErrands(db);
+
     final count = Sqflite.firstIntValue(
-      await db.rawQuery('SELECT COUNT(*) FROM errands'),
+      await db.rawQuery('SELECT COUNT(*) FROM errands WHERE is_seed = 1'),
     );
 
     if (count == 0) {
       await _seedDatabase(db, 2);
     }
+  }
+
+  Future<bool> _errandsTableExists(Database db) async {
+    final tableRows = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      ['errands'],
+    );
+
+    return tableRows.isNotEmpty;
+  }
+
+  Future<void> _ensureErrandSeedColumns(Database db) async {
+    final columns = await db.rawQuery('PRAGMA table_info(errands)');
+    final columnNames = columns.map((column) => column['name']).toSet();
+
+    if (!columnNames.contains('poster_id')) {
+      await db.execute('ALTER TABLE errands ADD COLUMN poster_id TEXT');
+    }
+
+    if (!columnNames.contains('poster_name')) {
+      await db.execute('ALTER TABLE errands ADD COLUMN poster_name TEXT');
+    }
+
+    if (!columnNames.contains('is_seed')) {
+      await db.execute(
+        'ALTER TABLE errands ADD COLUMN is_seed INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+  }
+
+  Future<void> _markExistingSeedErrands(Database db) async {
+    await db.update(
+      'errands',
+      {'poster_id': null, 'poster_name': 'UniMove', 'is_seed': 1},
+      where: '''
+        title IN (?, ?, ?, ?)
+        AND created_at IN (?, ?, ?, ?)
+      ''',
+      whereArgs: const [
+        'Simpan barang waktu cuti sem',
+        'Photostate slip exam',
+        'Beli Abuya COD KHAR 4182',
+        'Pinjam raket',
+        '2026-06-12T09:00:00.000',
+        '2026-06-12T10:30:00.000',
+        '2026-06-12T11:15:00.000',
+        '2026-06-11T16:45:00.000',
+      ],
+    );
   }
 }

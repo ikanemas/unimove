@@ -5,10 +5,23 @@ CREATE TABLE IF NOT EXISTS errands (
   description TEXT NOT NULL,
   time_to_complete TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('Open', 'Completed', 'Closed')) DEFAULT 'Open',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  poster_id TEXT,
+  poster_name TEXT,
+  is_seed INTEGER NOT NULL DEFAULT 0
 );
 
-INSERT INTO errands (title, reward, description, time_to_complete, status, created_at)
+INSERT INTO errands (
+  title,
+  reward,
+  description,
+  time_to_complete,
+  status,
+  created_at,
+  poster_id,
+  poster_name,
+  is_seed
+)
 VALUES
   (
     'Simpan barang waktu cuti sem',
@@ -16,7 +29,10 @@ VALUES
     'Pickup barang kat KHAR 4182, 9 Julai.',
     'Today before 5:00 PM',
     'Open',
-    '2026-06-12T09:00:00.000'
+    '2026-06-12T09:00:00.000',
+    NULL,
+    'UniMove',
+    1
   ),
   (
     'Photostate slip exam',
@@ -24,7 +40,10 @@ VALUES
     'Hantar kat KAHS block C .',
     'Within 2 hours',
     'Open',
-    '2026-06-12T10:30:00.000'
+    '2026-06-12T10:30:00.000',
+    NULL,
+    'UniMove',
+    1
   ),
   (
     'Beli Abuya COD KHAR 4182',
@@ -32,7 +51,10 @@ VALUES
     'Abuya ayam bahagian dada tambah kicap, extra sambal.',
     'By 1:30 PM',
     'Open',
-    '2026-06-12T11:15:00.000'
+    '2026-06-12T11:15:00.000',
+    NULL,
+    'UniMove',
+    1
   ),
   (
     'Pinjam raket',
@@ -40,5 +62,8 @@ VALUES
     'Nak main badminton 2 jam, nanti saya pulangkan.',
     'Before 7:00 PM',
     'Completed',
-    '2026-06-11T16:45:00.000'
+    '2026-06-11T16:45:00.000',
+    NULL,
+    'UniMove',
+    1
   );
