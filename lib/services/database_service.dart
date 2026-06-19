@@ -2,7 +2,6 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
-
 import '../models/errand.dart';
 
 class DatabaseService {
@@ -11,7 +10,7 @@ class DatabaseService {
   static final DatabaseService instance = DatabaseService._();
 
   static const String databaseName = 'unimove_db.sql';
-  static const String seedAssetPath = 'assets/db/unimove_db.sql';
+  static const String seedAssetPath = 'assets/db/unimove.sql';
 
   Database? _database;
 
@@ -26,6 +25,7 @@ class DatabaseService {
       databasePath,
       version: 2,
       onCreate: _seedDatabase,
+      onOpen: _ensureSeeded,
     );
     _database = openedDatabase;
     return openedDatabase;
@@ -69,56 +69,62 @@ class DatabaseService {
       'created_at': DateTime.now().toIso8601String(),
     });
   }
-  Future<int> insertUser(String name, String email, String password, String phone, String role) async {
-  final db = await database;
 
-  return await db.insert(
-    'user',
-    {
+  Future<int> insertUser(
+    String name,
+    String email,
+    String password,
+    String phone,
+    String role,
+  ) async {
+    final db = await database;
+
+    return await db.insert('user', {
       'name': name,
       'email': email,
       'password': password,
       'phone': phone,
       'role': role,
-    },
-  );
-}
-Future<int> updateUser({
-  required int id,
-  required String name,
-  required String email,
-  required String phone,
-  String? password,
-}) async {
-  final db = await database;
-
-  final data = {
-    'name': name,
-    'email': email,
-    'phone': phone,
-  };
-
-  if (password != null && password.isNotEmpty) {
-    data['password'] = password;
+    });
   }
 
-  return await db.update(
-    'user',
-    data,
-    where: 'id = ?',
-    whereArgs: [id],
-  );
-}
-Future<Map<String, Object?>?> getUser() async {
-  final db = await database;
+  Future<int> updateUser({
+    required int id,
+    required String name,
+    required String email,
+    required String phone,
+    String? password,
+  }) async {
+    final db = await database;
 
-  final result = await db.query('user', limit: 1);
+    final data = {
+      'name': name,
+      'email': email,
+      'phone': phone,
+    };
 
-  if (result.isNotEmpty) {
-    return result.first;
+    if (password != null && password.isNotEmpty) {
+      data['password'] = password;
+    }
+
+    return await db.update(
+      'user',
+      data,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
-  return null;
-}
+
+  Future<Map<String, Object?>?> getUser() async {
+    final db = await database;
+
+    final result = await db.query('user', limit: 1);
+
+    if (result.isNotEmpty) {
+      return result.first;
+    }
+    return null;
+  }
 
   Future<void> _seedDatabase(Database db, int version) async {
     final seedSql = await rootBundle.loadString(seedAssetPath);
@@ -129,6 +135,26 @@ Future<Map<String, Object?>?> getUser() async {
 
     for (final statement in statements) {
       await db.execute(statement);
+    }
+  }
+
+  Future<void> _ensureSeeded(Database db) async {
+    final tableRows = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      ['errands'],
+    );
+
+    if (tableRows.isEmpty) {
+      await _seedDatabase(db, 2);
+      return;
+    }
+
+    final count = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM errands'),
+    );
+
+    if (count == 0) {
+      await _seedDatabase(db, 2);
     }
   }
 }

@@ -175,7 +175,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: AppColors.gold.withOpacity(0.2),
+                          color: AppColors.gold.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
@@ -290,7 +290,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
                       // Role Dropdown
                       DropdownButtonFormField<String>(
-                        value: selectedRole,
+                        initialValue: selectedRole,
                         decoration: input("Select Role", Icons.people),
                         items: const [
                           DropdownMenuItem(
@@ -331,7 +331,7 @@ class _RegisterPageState extends State<RegisterPage> {
                               borderRadius: BorderRadius.circular(15),
                             ),
                             elevation: 4,
-                            shadowColor: AppColors.orange.withOpacity(0.3),
+                            shadowColor: AppColors.orange.withValues(alpha: 0.3),
                           ),
                           onPressed: isLoading ? null : register,
                           child: isLoading
