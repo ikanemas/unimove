@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+import '../models/app_notification.dart';
 import '../models/errand.dart';
+import '../models/errand_offer.dart';
 
 class DatabaseService {
   DatabaseService._();
@@ -25,7 +27,7 @@ class DatabaseService {
     final databasePath = p.join(await getDatabasesPath(), databaseName);
     final openedDatabase = await openDatabase(
       databasePath,
-      version: 4,
+      version: 6,
       onCreate: _seedDatabase,
       onUpgrade: _upgradeDatabase,
       onOpen: _ensureSeeded,
@@ -153,33 +155,300 @@ class DatabaseService {
     changes.value++;
   }
 
-  Future<bool> acceptErrand({
-    required int id,
+  Future<bool> createOffer({
+    required int errandId,
     required String runnerId,
     required String runnerName,
+    required String message,
+    required double proposedReward,
+    required String estimatedTime,
   }) async {
     final db = await database;
-    final updatedRows = await db.update(
-      'errands',
-      {
-        'runner_id': runnerId,
-        'runner_name': runnerName,
-        'accepted_at': DateTime.now().toIso8601String(),
-      },
-      where: '''
-        id = ?
-        AND status = ?
-        AND runner_id IS NULL
-        AND (poster_id IS NULL OR poster_id != ?)
-      ''',
-      whereArgs: [id, 'Open', runnerId],
-    );
+    final created = await db.transaction<bool>((transaction) async {
+      final rows = await transaction.query(
+        'errands',
+        columns: ['title', 'poster_id'],
+        where: 'id = ?',
+        whereArgs: [errandId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return false;
 
-    if (updatedRows > 0) {
-      changes.value++;
+      final errand = await transaction.query(
+        'errands',
+        columns: ['status', 'runner_id', 'poster_id'],
+        where: 'id = ?',
+        whereArgs: [errandId],
+        limit: 1,
+      );
+      final row = errand.first;
+      if (row['status'] != 'Open' ||
+          row['runner_id'] != null ||
+          row['poster_id'] == runnerId) {
+        return false;
+      }
+
+      final existing = await transaction.query(
+        'errand_offers',
+        columns: ['id', 'status'],
+        where: 'errand_id = ? AND runner_id = ?',
+        whereArgs: [errandId, runnerId],
+        limit: 1,
+      );
+
+      if (existing.isEmpty) {
+        await transaction.insert('errand_offers', {
+          'errand_id': errandId,
+          'runner_id': runnerId,
+          'runner_name': runnerName,
+          'message': message,
+          'proposed_reward': proposedReward,
+          'estimated_time': estimatedTime,
+          'status': 'Pending',
+          'created_at': DateTime.now().toIso8601String(),
+        });
+      } else if (existing.first['status'] == 'Rejected' ||
+          existing.first['status'] == 'Withdrawn') {
+        await transaction.update(
+          'errand_offers',
+          {
+            'runner_name': runnerName,
+            'message': message,
+            'proposed_reward': proposedReward,
+            'estimated_time': estimatedTime,
+            'status': 'Pending',
+            'created_at': DateTime.now().toIso8601String(),
+          },
+          where: 'id = ?',
+          whereArgs: [existing.first['id']],
+        );
+      } else {
+        return false;
+      }
+
+      final posterId = rows.first['poster_id'] as String?;
+      if (posterId != null && posterId.isNotEmpty) {
+        final errandTitle = rows.first['title'] as String;
+        await transaction.insert('notifications', {
+          'user_id': posterId,
+          'errand_id': errandId,
+          'title': 'New runner request',
+          'message': '$runnerName wants to do "$errandTitle".',
+          'is_read': 0,
+          'created_at': DateTime.now().toIso8601String(),
+        });
+      }
       return true;
-    }
-    return false;
+    });
+
+    if (created) changes.value++;
+    return created;
+  }
+
+  Future<List<ErrandOffer>> getOffersForErrand(int errandId) async {
+    final db = await database;
+    final rows = await db.query(
+      'errand_offers',
+      where: 'errand_id = ?',
+      whereArgs: [errandId],
+      orderBy: '''
+        CASE status
+          WHEN 'Pending' THEN 0
+          WHEN 'Accepted' THEN 1
+          ELSE 2
+        END,
+        created_at DESC
+      ''',
+    );
+    return rows.map(ErrandOffer.fromMap).toList();
+  }
+
+  Future<List<ErrandOffer>> getOffersByRunner(String runnerId) async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      '''
+        SELECT errand_offers.*, errands.title AS errand_title
+        FROM errand_offers
+        INNER JOIN errands ON errands.id = errand_offers.errand_id
+        WHERE errand_offers.runner_id = ?
+        ORDER BY errand_offers.created_at DESC
+      ''',
+      [runnerId],
+    );
+    return rows.map(ErrandOffer.fromMap).toList();
+  }
+
+  Future<ErrandOffer?> getRunnerOffer({
+    required int errandId,
+    required String runnerId,
+  }) async {
+    final db = await database;
+    final rows = await db.query(
+      'errand_offers',
+      where: 'errand_id = ? AND runner_id = ?',
+      whereArgs: [errandId, runnerId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : ErrandOffer.fromMap(rows.first);
+  }
+
+  Future<bool> acceptOffer({
+    required int offerId,
+    required String posterId,
+  }) async {
+    final db = await database;
+    final accepted = await db.transaction<bool>((transaction) async {
+      final offers = await transaction.query(
+        'errand_offers',
+        where: 'id = ? AND status = ?',
+        whereArgs: [offerId, 'Pending'],
+        limit: 1,
+      );
+      if (offers.isEmpty) return false;
+
+      final offer = offers.first;
+      final errandId = offer['errand_id'] as int;
+      final errands = await transaction.query(
+        'errands',
+        columns: ['title', 'poster_id', 'status', 'runner_id'],
+        where: 'id = ?',
+        whereArgs: [errandId],
+        limit: 1,
+      );
+      if (errands.isEmpty) return false;
+
+      final errand = errands.first;
+      if (errand['poster_id'] != posterId ||
+          errand['status'] != 'Open' ||
+          errand['runner_id'] != null) {
+        return false;
+      }
+
+      await transaction.update(
+        'errands',
+        {
+          'runner_id': offer['runner_id'],
+          'runner_name': offer['runner_name'],
+          'accepted_at': DateTime.now().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [errandId],
+      );
+
+      await transaction.update(
+        'errand_offers',
+        {'status': 'Accepted'},
+        where: 'id = ?',
+        whereArgs: [offerId],
+      );
+      await transaction.update(
+        'errand_offers',
+        {'status': 'Rejected'},
+        where: 'errand_id = ? AND id != ? AND status = ?',
+        whereArgs: [errandId, offerId, 'Pending'],
+      );
+
+      await transaction.insert('notifications', {
+        'user_id': offer['runner_id'],
+        'errand_id': errandId,
+        'title': 'Request accepted',
+        'message': 'Your request for "${errand['title']}" was accepted.',
+        'is_read': 0,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      return true;
+    });
+
+    if (accepted) changes.value++;
+    return accepted;
+  }
+
+  Future<bool> rejectOffer({
+    required int offerId,
+    required String posterId,
+  }) async {
+    final db = await database;
+    final rejected = await db.transaction<bool>((transaction) async {
+      final offers = await transaction.rawQuery(
+        '''
+          SELECT errand_offers.*, errands.title AS errand_title,
+                 errands.poster_id AS poster_id
+          FROM errand_offers
+          INNER JOIN errands ON errands.id = errand_offers.errand_id
+          WHERE errand_offers.id = ? AND errand_offers.status = ?
+        ''',
+        [offerId, 'Pending'],
+      );
+      if (offers.isEmpty || offers.first['poster_id'] != posterId) {
+        return false;
+      }
+
+      final offer = offers.first;
+      await transaction.update(
+        'errand_offers',
+        {'status': 'Rejected'},
+        where: 'id = ?',
+        whereArgs: [offerId],
+      );
+      await transaction.insert('notifications', {
+        'user_id': offer['runner_id'],
+        'errand_id': offer['errand_id'],
+        'title': 'Request rejected',
+        'message': 'Your request for "${offer['errand_title']}" was rejected.',
+        'is_read': 0,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      return true;
+    });
+
+    if (rejected) changes.value++;
+    return rejected;
+  }
+
+  Future<List<AppNotification>> getNotifications(String userId) async {
+    final db = await database;
+    final rows = await db.query(
+      'notifications',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(AppNotification.fromMap).toList();
+  }
+
+  Future<int> getUnreadNotificationCount(String userId) async {
+    final db = await database;
+    final result = await db.rawQuery(
+      '''
+        SELECT COUNT(*)
+        FROM notifications
+        WHERE user_id = ? AND is_read = 0
+      ''',
+      [userId],
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  Future<void> markNotificationRead(int notificationId) async {
+    final db = await database;
+    await db.update(
+      'notifications',
+      {'is_read': 1},
+      where: 'id = ?',
+      whereArgs: [notificationId],
+    );
+    changes.value++;
+  }
+
+  Future<void> markAllNotificationsRead(String userId) async {
+    final db = await database;
+    await db.update(
+      'notifications',
+      {'is_read': 1},
+      where: 'user_id = ? AND is_read = 0',
+      whereArgs: [userId],
+    );
+    changes.value++;
   }
 
   Future<void> updateAssignedErrandStatus({
@@ -282,6 +551,8 @@ class DatabaseService {
 
     await _ensureErrandSeedColumns(db);
     await _ensureRunnerColumns(db);
+    await _ensureNotificationsTable(db);
+    await _ensureOffersTable(db);
     await _markExistingSeedErrands(db);
   }
 
@@ -293,6 +564,8 @@ class DatabaseService {
 
     await _ensureErrandSeedColumns(db);
     await _ensureRunnerColumns(db);
+    await _ensureNotificationsTable(db);
+    await _ensureOffersTable(db);
     await _markExistingSeedErrands(db);
 
     final count = Sqflite.firstIntValue(
@@ -345,6 +618,41 @@ class DatabaseService {
     if (!columnNames.contains('accepted_at')) {
       await db.execute('ALTER TABLE errands ADD COLUMN accepted_at TEXT');
     }
+  }
+
+  Future<void> _ensureNotificationsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        errand_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        is_read INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (errand_id) REFERENCES errands(id) ON DELETE CASCADE
+      )
+    ''');
+  }
+
+  Future<void> _ensureOffersTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS errand_offers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        errand_id INTEGER NOT NULL,
+        runner_id TEXT NOT NULL,
+        runner_name TEXT NOT NULL,
+        message TEXT NOT NULL,
+        proposed_reward REAL NOT NULL,
+        estimated_time TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (
+          status IN ('Pending', 'Accepted', 'Rejected', 'Withdrawn')
+        ) DEFAULT 'Pending',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (errand_id, runner_id),
+        FOREIGN KEY (errand_id) REFERENCES errands(id) ON DELETE CASCADE
+      )
+    ''');
   }
 
   Future<void> _markExistingSeedErrands(Database db) async {

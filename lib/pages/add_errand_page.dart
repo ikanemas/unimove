@@ -5,6 +5,8 @@ import '../models/errand.dart';
 import '../services/database_service.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/notification_button.dart';
+import 'offers_page.dart';
 
 class AddErrandPage extends StatefulWidget {
   const AddErrandPage({super.key});
@@ -119,6 +121,7 @@ class _AddErrandPageState extends State<AddErrandPage> {
       appBar: AppBar(
         title: const Text('Manage Errands'),
         actions: [
+          const NotificationButton(),
           IconButton(
             tooltip: 'Post errand',
             onPressed: _showForm,
@@ -188,6 +191,16 @@ class _AddErrandPageState extends State<AddErrandPage> {
                           onSelected: (action) {
                             if (action == 'edit') {
                               _showForm(errand);
+                            } else if (action == 'offers') {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute<void>(
+                                  builder: (_) => OffersPage(
+                                    errandId: errand.id!,
+                                    errandTitle: errand.title,
+                                  ),
+                                ),
+                              );
                             } else if (action == 'delete') {
                               _delete(errand);
                             } else {
@@ -199,6 +212,11 @@ class _AddErrandPageState extends State<AddErrandPage> {
                               value: 'edit',
                               child: Text('Edit'),
                             ),
+                            if (errand.status == 'Open')
+                              const PopupMenuItem(
+                                value: 'offers',
+                                child: Text('View runner requests'),
+                              ),
                             for (final status in [
                               'Open',
                               'Completed',

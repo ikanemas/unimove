@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../models/errand.dart';
+import '../models/errand_offer.dart';
 import '../services/database_service.dart';
 import '../services/supabase_service.dart';
+import 'offers_page.dart';
 
 class ErrandView extends StatefulWidget {
   const ErrandView({super.key, required this.errandId});
@@ -16,7 +18,8 @@ class ErrandView extends StatefulWidget {
 class _ErrandViewState extends State<ErrandView> {
   final _database = DatabaseService.instance;
   late Future<Errand?> _errand;
-  bool _accepting = false;
+  late Future<ErrandOffer?> _myOffer;
+  bool _submittingRequest = false;
 
   String get _userId => SupabaseService.client.auth.currentUser?.id ?? '';
 
@@ -33,42 +36,54 @@ class _ErrandViewState extends State<ErrandView> {
   void initState() {
     super.initState();
     _errand = _database.getErrand(widget.errandId);
+    _myOffer = _loadMyOffer();
   }
 
-  Future<void> _accept(Errand errand) async {
-    setState(() => _accepting = true);
+  Future<ErrandOffer?> _loadMyOffer() {
+    if (_userId.isEmpty) return Future.value();
+    return _database.getRunnerOffer(
+      errandId: widget.errandId,
+      runnerId: _userId,
+    );
+  }
+
+  Future<void> _submitRequest(Errand errand) async {
+    if (_submittingRequest) return;
+    setState(() => _submittingRequest = true);
 
     try {
-      final accepted = await _database.acceptErrand(
-        id: errand.id!,
+      final created = await _database.createOffer(
+        errandId: errand.id!,
         runnerId: _userId,
         runnerName: _userName,
+        message: 'I can complete this errand using the original terms.',
+        proposedReward: errand.reward,
+        estimatedTime: errand.timeToComplete,
       );
       if (!mounted) return;
 
-      if (!accepted) {
+      if (!created) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('This errand is no longer available.')),
+          const SnackBar(
+            content: Text(
+              'Request cannot be sent. The errand may be unavailable.',
+            ),
+          ),
         );
-        setState(() {
-          _accepting = false;
-          _errand = _database.getErrand(widget.errandId);
-        });
         return;
       }
 
+      setState(() => _myOffer = _loadMyOffer());
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Errand accepted. It is now in My Tasks.'),
-        ),
+        const SnackBar(content: Text('Request sent. Waiting for the seller.')),
       );
-      Navigator.pop(context);
     } catch (error) {
       if (!mounted) return;
-      setState(() => _accepting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to accept errand: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Unable to send request: $error')));
+    } finally {
+      if (mounted) setState(() => _submittingRequest = false);
     }
   }
 
@@ -89,9 +104,10 @@ class _ErrandViewState extends State<ErrandView> {
           }
 
           final isOwner = errand.posterId == _userId;
-          final canAccept =
+          final canMakeOffer =
               _userId.isNotEmpty &&
               !isOwner &&
+              errand.posterId != null &&
               errand.status == 'Open' &&
               !errand.isAssigned;
 
@@ -144,32 +160,115 @@ class _ErrandViewState extends State<ErrandView> {
                   context,
                 ).textTheme.bodyLarge?.copyWith(height: 1.45),
               ),
-              if (canAccept) ...[
+              if (canMakeOffer) ...[
                 const SizedBox(height: 28),
-                SizedBox(
-                  height: 52,
-                  child: FilledButton.icon(
-                    onPressed: _accepting ? null : () => _accept(errand),
-                    icon: _accepting
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.task_alt),
-                    label: const Text('Accept Errand'),
-                  ),
+                FutureBuilder<ErrandOffer?>(
+                  future: _myOffer,
+                  builder: (context, offerSnapshot) {
+                    final offer = offerSnapshot.data;
+                    if (offerSnapshot.connectionState ==
+                        ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (offer?.status == 'Pending') {
+                      return _OfferStatusPanel(
+                        status: 'Pending',
+                        message:
+                            'Your request has been sent. Waiting for the seller.',
+                      );
+                    }
+                    if (offer?.status == 'Accepted') {
+                      return _OfferStatusPanel(
+                        status: 'Accepted',
+                        message: 'Your request was accepted. Check My Tasks.',
+                      );
+                    }
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (offer?.status == 'Rejected') ...[
+                          const _OfferStatusPanel(
+                            status: 'Rejected',
+                            message:
+                                'Your previous request was rejected. You may try again.',
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        SizedBox(
+                          height: 52,
+                          child: FilledButton.icon(
+                            onPressed: _submittingRequest
+                                ? null
+                                : () => _submitRequest(errand),
+                            icon: _submittingRequest
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.volunteer_activism_outlined),
+                            label: const Text('I Can Do This'),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
               if (isOwner && errand.status == 'Open') ...[
                 const SizedBox(height: 20),
-                const Text(
-                  'This is your own errand. Another user must accept it.',
-                  textAlign: TextAlign.center,
+                SizedBox(
+                  height: 52,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => OffersPage(
+                            errandId: errand.id!,
+                            errandTitle: errand.title,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.groups_outlined),
+                    label: const Text('View Runner Requests'),
+                  ),
                 ),
               ],
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _OfferStatusPanel extends StatelessWidget {
+  const _OfferStatusPanel({required this.status, required this.message});
+
+  final String status;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Theme.of(
+          context,
+        ).colorScheme.primaryContainer.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(status, style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text(message),
+        ],
       ),
     );
   }

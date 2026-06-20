@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../services/database_service.dart';
+import '../services/supabase_service.dart';
 import 'add_errand_page.dart';
 import 'home_page.dart';
 import 'my_tasks_page.dart';
@@ -13,7 +15,34 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
+  final _database = DatabaseService.instance;
   int _selectedIndex = 0;
+  late Future<int> _unreadCount;
+
+  String get _userId => SupabaseService.client.auth.currentUser?.id ?? '';
+
+  @override
+  void initState() {
+    super.initState();
+    _unreadCount = _loadUnreadCount();
+    _database.changes.addListener(_reloadUnreadCount);
+  }
+
+  @override
+  void dispose() {
+    _database.changes.removeListener(_reloadUnreadCount);
+    super.dispose();
+  }
+
+  Future<int> _loadUnreadCount() {
+    if (_userId.isEmpty) return Future.value(0);
+    return _database.getUnreadNotificationCount(_userId);
+  }
+
+  void _reloadUnreadCount() {
+    if (!mounted) return;
+    setState(() => _unreadCount = _loadUnreadCount());
+  }
 
   void _selectPage(int index) {
     setState(() {
@@ -27,31 +56,45 @@ class _AppShellState extends State<AppShell> {
 
     return Scaffold(
       body: IndexedStack(index: _selectedIndex, children: pages),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: _selectPage,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.task_outlined),
-            selectedIcon: Icon(Icons.task),
-            label: 'My Tasks',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.assignment_outlined),
-            selectedIcon: Icon(Icons.assignment),
-            label: 'Manage',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
+      bottomNavigationBar: FutureBuilder<int>(
+        future: _unreadCount,
+        builder: (context, snapshot) {
+          final unreadCount = snapshot.data ?? 0;
+          return NavigationBar(
+            selectedIndex: _selectedIndex,
+            onDestinationSelected: _selectPage,
+            destinations: [
+              const NavigationDestination(
+                icon: Icon(Icons.home_outlined),
+                selectedIcon: Icon(Icons.home),
+                label: 'Home',
+              ),
+              const NavigationDestination(
+                icon: Icon(Icons.task_outlined),
+                selectedIcon: Icon(Icons.task),
+                label: 'My Tasks',
+              ),
+              NavigationDestination(
+                icon: Badge(
+                  isLabelVisible: unreadCount > 0,
+                  label: Text(unreadCount > 99 ? '99+' : '$unreadCount'),
+                  child: const Icon(Icons.assignment_outlined),
+                ),
+                selectedIcon: Badge(
+                  isLabelVisible: unreadCount > 0,
+                  label: Text(unreadCount > 99 ? '99+' : '$unreadCount'),
+                  child: const Icon(Icons.assignment),
+                ),
+                label: 'Manage',
+              ),
+              const NavigationDestination(
+                icon: Icon(Icons.person_outline),
+                selectedIcon: Icon(Icons.person),
+                label: 'Profile',
+              ),
+            ],
+          );
+        },
       ),
     );
   }

@@ -14,6 +14,33 @@ CREATE TABLE IF NOT EXISTS errands (
   is_seed INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  errand_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  is_read INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (errand_id) REFERENCES errands(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS errand_offers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  errand_id INTEGER NOT NULL,
+  runner_id TEXT NOT NULL,
+  runner_name TEXT NOT NULL,
+  message TEXT NOT NULL,
+  proposed_reward REAL NOT NULL,
+  estimated_time TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (
+    status IN ('Pending', 'Accepted', 'Rejected', 'Withdrawn')
+  ) DEFAULT 'Pending',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (errand_id, runner_id),
+  FOREIGN KEY (errand_id) REFERENCES errands(id) ON DELETE CASCADE
+);
+
 INSERT INTO errands (
   title,
   reward,
