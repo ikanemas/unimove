@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/errand_offer.dart';
 import '../services/database_service.dart';
@@ -44,26 +46,203 @@ class _OffersPageState extends State<OffersPage> {
 
   void _reload() {
     if (!mounted) return;
-    setState(() => _offers = _loadOffers());
+    setState(() {
+      _offers = _loadOffers();
+    });
+  }
+
+  // Sahkan atau paksa pengguna isi nombor telefon sebelum menerima tawaran
+  Future<String?> _ensurePhoneNumber(User user) async {
+    String? currentPhone = user.userMetadata?['phone_number'];
+
+    if (currentPhone != null && currentPhone.trim().isNotEmpty) {
+      return currentPhone;
+    }
+
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        final TextEditingController phoneController = TextEditingController();
+        final formKey = GlobalKey<FormState>();
+        bool isSaving = false;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              title: const Text(
+                'Phone Number Required',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              content: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Please provide your phone number so the runner can coordinate with you via WhatsApp.',
+                      style: TextStyle(color: Colors.grey, fontSize: 14),
+                    ),
+                    const SizedBox(height: 15),
+                    TextFormField(
+                      controller: phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: InputDecoration(
+                        labelText: 'Phone Number',
+                        hintText: 'e.g., 60123456789',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        prefixIcon: const Icon(Icons.phone),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Phone number cannot be empty';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving ? null : () => Navigator.pop(dialogContext, null),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF643D),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          if (formKey.currentState!.validate()) {
+                            setDialogState(() => isSaving = true);
+                            final inputPhone = phoneController.text.trim();
+
+                            try {
+                              await SupabaseService.client.auth.updateUser(
+                                UserAttributes(data: {'phone_number': inputPhone}),
+                              );
+                              if (context.mounted) {
+                                Navigator.pop(dialogContext, inputPhone);
+                              }
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Failed to save profile: $e')),
+                              );
+                            } finally {
+                              setDialogState(() => isSaving = false);
+                            }
+                          }
+                        },
+                  child: isSaving
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Save & Continue', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Papar pop-up WhatsApp selepas tugasan berjaya diproses
+  void _showWhatsAppLinkDialog(ErrandOffer offer) {
+    showDialog(
+      context: context,
+      builder: (BuildContext popContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          title: const Text('Errand Assigned!', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: Text(
+            'You have accepted the offer from ${offer.runnerName}. You can now contact them directly on WhatsApp.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(popContext),
+              child: const Text('Close'),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF25D366), // WhatsApp Green
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () async {
+                Navigator.pop(popContext);
+
+                // Menggunakan dynamic casting untuk mengelakkan ralat kompilasi jika properti belum didaftar di model
+                String runnerPhone = (offer as dynamic).runnerPhone ?? ''; 
+                
+                if (runnerPhone.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Runner phone number not found.')),
+                  );
+                  return;
+                }
+
+                String cleanPhone = runnerPhone.replaceAll(RegExp(r'[^\d+]'), '');
+                if (!cleanPhone.startsWith('+') && !cleanPhone.startsWith('6')) {
+                  cleanPhone = '6$cleanPhone'; 
+                }
+
+                final Uri whatsappUri = Uri.parse(
+                  'https://wa.me/$cleanPhone?text=Hello ${offer.runnerName}, I accepted your offer for "${widget.errandTitle}".',
+                );
+
+                if (await canLaunchUrl(whatsappUri)) {
+                  await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+                } else {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Could not open WhatsApp.')),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.chat, color: Colors.white),
+              label: const Text('Open WhatsApp', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _accept(ErrandOffer offer) async {
+    final user = SupabaseService.client.auth.currentUser;
+    if (user == null) return;
+
+    final phone = await _ensurePhoneNumber(user);
+    if (phone == null) return; 
+
     setState(() => _processingOfferId = offer.id);
     try {
       final accepted = await _database.acceptOffer(
         offerId: offer.id,
         posterId: _posterId,
       );
+      
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            accepted
-                ? '${offer.runnerName} is now assigned to this errand.'
-                : 'This request can no longer be accepted.',
-          ),
-        ),
-      );
+      
+      if (accepted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${offer.runnerName} is now assigned to this errand.')),
+        );
+        _showWhatsAppLinkDialog(offer);
+      } else {
+        print("🔴 SQLite menolak! Semak sama ada poster_id sepadan atau status Errand di DB telah bertukar.");
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This request can no longer be accepted.')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _processingOfferId = null);
     }
@@ -134,8 +313,7 @@ class _OffersPageState extends State<OffersPage> {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'Reward: RM '
-                        '${offer.proposedReward.toStringAsFixed(2)}',
+                        'Reward: RM ${offer.proposedReward.toStringAsFixed(2)}',
                       ),
                       Text('Required time: ${offer.estimatedTime}'),
                       if (pending) ...[
@@ -159,6 +337,7 @@ class _OffersPageState extends State<OffersPage> {
                                       dimension: 18,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
+                                        color: Colors.white,
                                       ),
                                     )
                                   : const Text('Accept'),

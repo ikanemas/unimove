@@ -4,6 +4,7 @@ class ErrandOffer {
     required this.errandId,
     required this.runnerId,
     required this.runnerName,
+    required this.runnerPhone,
     required this.message,
     required this.proposedReward,
     required this.estimatedTime,
@@ -16,6 +17,7 @@ class ErrandOffer {
   final int errandId;
   final String runnerId;
   final String runnerName;
+  final String runnerPhone;
   final String message;
   final double proposedReward;
   final String estimatedTime;
@@ -29,6 +31,7 @@ class ErrandOffer {
       errandId: map['errand_id'] as int,
       runnerId: map['runner_id'] as String,
       runnerName: map['runner_name'] as String,
+      runnerPhone: map['runner_phone'] as String,
       message: map['message'] as String,
       proposedReward: (map['proposed_reward'] as num).toDouble(),
       estimatedTime: map['estimated_time'] as String,
@@ -37,4 +40,6 @@ class ErrandOffer {
       errandTitle: map['errand_title'] as String?,
     );
   }
+
+  String? get posterPhone => null;
 }

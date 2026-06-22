@@ -91,6 +91,7 @@ class DatabaseService {
     return Errand.fromMap(rows.first);
   }
 
+  // FIX 1: Added posterPhone parameter and saving it to local DB
   Future<int> insertErrand({
     required String title,
     required double reward,
@@ -98,6 +99,7 @@ class DatabaseService {
     required String timeToComplete,
     String? posterId,
     String? posterName,
+    String? posterPhone, 
   }) async {
     final db = await database;
     final id = await db.insert('errands', {
@@ -109,6 +111,7 @@ class DatabaseService {
       'created_at': DateTime.now().toIso8601String(),
       'poster_id': posterId,
       'poster_name': posterName,
+      'poster_phone': posterPhone, // Saved here
       'is_seed': 0,
     });
     changes.value++;
@@ -155,6 +158,7 @@ class DatabaseService {
     changes.value++;
   }
 
+  // FIX 2: Added runnerPhone parameter and tracking transaction updates
   Future<bool> createOffer({
     required int errandId,
     required String runnerId,
@@ -162,6 +166,7 @@ class DatabaseService {
     required String message,
     required double proposedReward,
     required String estimatedTime,
+    String? runnerPhone,
   }) async {
     final db = await database;
     final created = await db.transaction<bool>((transaction) async {
@@ -201,6 +206,7 @@ class DatabaseService {
           'errand_id': errandId,
           'runner_id': runnerId,
           'runner_name': runnerName,
+          'runner_phone': runnerPhone, // Inserted here
           'message': message,
           'proposed_reward': proposedReward,
           'estimated_time': estimatedTime,
@@ -213,6 +219,7 @@ class DatabaseService {
           'errand_offers',
           {
             'runner_name': runnerName,
+            'runner_phone': runnerPhone, // Updated here
             'message': message,
             'proposed_reward': proposedReward,
             'estimated_time': estimatedTime,
@@ -263,11 +270,12 @@ class DatabaseService {
     return rows.map(ErrandOffer.fromMap).toList();
   }
 
+  // FIX 3: Updated SQL raw query to include errands.poster_phone in the JOIN select
   Future<List<ErrandOffer>> getOffersByRunner(String runnerId) async {
     final db = await database;
     final rows = await db.rawQuery(
       '''
-        SELECT errand_offers.*, errands.title AS errand_title
+        SELECT errand_offers.*, errands.title AS errand_title, errands.poster_phone AS poster_phone
         FROM errand_offers
         INNER JOIN errands ON errands.id = errand_offers.errand_id
         WHERE errand_offers.runner_id = ?
@@ -292,6 +300,7 @@ class DatabaseService {
     return rows.isEmpty ? null : ErrandOffer.fromMap(rows.first);
   }
 
+  // FIX 4: Copy the runner's phone number into the errands record table upon acceptance
   Future<bool> acceptOffer({
     required int offerId,
     required String posterId,
@@ -329,6 +338,8 @@ class DatabaseService {
         {
           'runner_id': offer['runner_id'],
           'runner_name': offer['runner_name'],
+          'runner_phone': offer['runner_phone'],
+          'status': 'Closed',
           'accepted_at': DateTime.now().toIso8601String(),
         },
         where: 'id = ?',
@@ -586,6 +597,7 @@ class DatabaseService {
     return tableRows.isNotEmpty;
   }
 
+  // FIX 5: Added poster_phone and runner_phone checking setup to the migrations block
   Future<void> _ensureErrandSeedColumns(Database db) async {
     final columns = await db.rawQuery('PRAGMA table_info(errands)');
     final columnNames = columns.map((column) => column['name']).toSet();
@@ -596,6 +608,14 @@ class DatabaseService {
 
     if (!columnNames.contains('poster_name')) {
       await db.execute('ALTER TABLE errands ADD COLUMN poster_name TEXT');
+    }
+
+    if (!columnNames.contains('poster_phone')) {
+      await db.execute('ALTER TABLE errands ADD COLUMN poster_phone TEXT');
+    }
+
+    if (!columnNames.contains('runner_phone')) {
+      await db.execute('ALTER TABLE errands ADD COLUMN runner_phone TEXT');
     }
 
     if (!columnNames.contains('is_seed')) {
@@ -635,6 +655,7 @@ class DatabaseService {
     ''');
   }
 
+  // FIX 6: Updated table setup to handle runner_phone fields safely
   Future<void> _ensureOffersTable(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS errand_offers (
@@ -642,6 +663,7 @@ class DatabaseService {
         errand_id INTEGER NOT NULL,
         runner_id TEXT NOT NULL,
         runner_name TEXT NOT NULL,
+        runner_phone TEXT,
         message TEXT NOT NULL,
         proposed_reward REAL NOT NULL,
         estimated_time TEXT NOT NULL,
@@ -653,6 +675,13 @@ class DatabaseService {
         FOREIGN KEY (errand_id) REFERENCES errands(id) ON DELETE CASCADE
       )
     ''');
+
+    // Run dynamic structural alter check block in case table already exists on user's storage
+    final columns = await db.rawQuery('PRAGMA table_info(errand_offers)');
+    final columnNames = columns.map((column) => column['name']).toSet();
+    if (columnNames.isNotEmpty && !columnNames.contains('runner_phone')) {
+      await db.execute('ALTER TABLE errand_offers ADD COLUMN runner_phone TEXT');
+    }
   }
 
   Future<void> _markExistingSeedErrands(Database db) async {

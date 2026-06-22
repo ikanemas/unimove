@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/errand.dart';
 import '../models/errand_offer.dart';
@@ -39,6 +41,39 @@ class _RunnerActivityAppBar extends StatelessWidget
         ],
       ),
     );
+  }
+}
+
+Future<void> _openWhatsAppChat({
+  required BuildContext context,
+  required String? phoneNumber,
+  required String message,
+}) async {
+  if (phoneNumber == null || phoneNumber.trim().isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Contact phone number not available.')),
+    );
+    return;
+  }
+
+  String cleanPhone = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+  if (!cleanPhone.startsWith('+') && !cleanPhone.startsWith('6')) {
+    cleanPhone =
+        '6$cleanPhone'; // Standard fallback prefix for Malaysia context
+  }
+
+  final Uri whatsappUri = Uri.parse(
+    'https://wa.me/$cleanPhone?text=${Uri.encodeComponent(message)}',
+  );
+
+  if (await canLaunchUrl(whatsappUri)) {
+    await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+  } else {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open WhatsApp app.')),
+      );
+    }
   }
 }
 
@@ -128,7 +163,8 @@ class _AssignedTasksTabState extends State<_AssignedTasksTab> {
           separatorBuilder: (_, _) => const SizedBox(height: 10),
           itemBuilder: (context, index) {
             final task = tasks[index];
-            final canComplete = task.status == 'Open';
+            final canComplete = task.status == 'Closed';
+            final isChatAvailable = task.status == 'Closed';
 
             return Card(
               margin: EdgeInsets.zero,
@@ -159,6 +195,24 @@ class _AssignedTasksTabState extends State<_AssignedTasksTab> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
+                        if (isChatAvailable) ...[
+                          IconButton(
+                            icon: const Icon(
+                              Icons.chat,
+                              color: Color(0xFF25D366),
+                            ),
+                            tooltip: 'Chat with Poster',
+                            onPressed: () {
+                              _openWhatsAppChat(
+                                context: context,
+                                phoneNumber: task.posterPhone,
+                                message:
+                                    'Hello! I am the runner for your errand: "${task.title}". Let\'s coordinate.',
+                              );
+                            },
+                          ),
+                          const Spacer(),
+                        ],
                         TextButton(
                           onPressed: () {
                             Navigator.push(
@@ -262,42 +316,72 @@ class _MyOffersTabState extends State<_MyOffersTab> {
           separatorBuilder: (_, _) => const SizedBox(height: 10),
           itemBuilder: (context, index) {
             final offer = offers[index];
+            if (offer.status == 'Accepted') {
+              return const SizedBox.shrink();
+            }
+            final isAccepted = offer.status == 'Accepted';
+
             return Card(
               margin: EdgeInsets.zero,
-              child: InkWell(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => ErrandView(errandId: offer.errandId),
-                    ),
-                  );
-                },
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              offer.errandTitle ?? 'Errand',
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w700),
-                            ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            offer.errandTitle ?? 'Errand',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
                           ),
-                          _StatusBadge(status: offer.status),
+                        ),
+                        _StatusBadge(status: offer.status),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Reward: RM ${offer.proposedReward.toStringAsFixed(2)}'
+                      '\nRequired time: ${offer.estimatedTime}',
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (isAccepted) ...[
+                          IconButton(
+                            icon: const Icon(
+                              Icons.chat,
+                              color: Color(0xFF25D366),
+                            ),
+                            tooltip: 'Chat with Requester',
+                            onPressed: () {
+                              _openWhatsAppChat(
+                                context: context,
+                                phoneNumber: offer.posterPhone,
+                                message:
+                                    'Hi! You accepted my request for "${offer.errandTitle}". I am ready to start.',
+                              );
+                            },
+                          ),
+                          const Spacer(),
                         ],
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Reward: RM '
-                        '${offer.proposedReward.toStringAsFixed(2)}'
-                        '\nRequired time: ${offer.estimatedTime}',
-                      ),
-                    ],
-                  ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) =>
+                                    ErrandView(errandId: offer.errandId),
+                              ),
+                            );
+                          },
+                          child: const Text('View details'),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             );
@@ -323,7 +407,7 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: color.withAlpha((0.12 * 255).round()),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
