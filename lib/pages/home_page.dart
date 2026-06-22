@@ -5,7 +5,9 @@ import '../services/database_service.dart';
 import 'errand_view.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  const HomePage({super.key, this.refreshVersion = 0});
+
+  final int refreshVersion;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -18,7 +20,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _errandsFuture = _databaseService.getOpenErrands();
+    _errandsFuture = _loadErrands();
     _databaseService.changes.addListener(_reload);
   }
 
@@ -28,50 +30,103 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant HomePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshVersion != widget.refreshVersion) {
+      _errandsFuture = _loadErrands();
+    }
+  }
+
   void _reload() {
     if (!mounted) return;
-    setState(() => _errandsFuture = _databaseService.getOpenErrands());
+    setState(() {
+      _errandsFuture = _loadErrands();
+    });
+  }
+
+  Future<List<Errand>> _loadErrands() {
+    return _databaseService.getOpenErrands();
+  }
+
+  Future<void> _refreshErrands() async {
+    final errands = _loadErrands();
+    if (!mounted) return;
+    setState(() {
+      _errandsFuture = errands;
+    });
+    try {
+      await errands;
+    } catch (_) {
+      // FutureBuilder renders the error state from the same future.
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('UniMove')),
-      body: FutureBuilder<List<Errand>>(
-        future: _errandsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: RefreshIndicator(
+        onRefresh: _refreshErrands,
+        child: FutureBuilder<List<Errand>>(
+          future: _errandsFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const _ScrollableMessage(
+                child: CircularProgressIndicator(),
+              );
+            }
 
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
+            if (snapshot.hasError) {
+              return _ScrollableMessage(
                 child: Text(
                   'Unable to load errands right now.',
                   style: Theme.of(context).textTheme.titleMedium,
                   textAlign: TextAlign.center,
                 ),
-              ),
+              );
+            }
+
+            final errands = snapshot.data ?? [];
+            if (errands.isEmpty) {
+              return const _ScrollableMessage(
+                child: Text('No errands posted yet.'),
+              );
+            }
+
+            return ListView.separated(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              itemCount: errands.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                return _ErrandListTile(errand: errands[index]);
+              },
             );
-          }
-
-          final errands = snapshot.data ?? [];
-          if (errands.isEmpty) {
-            return const Center(child: Text('No errands posted yet.'));
-          }
-
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            itemCount: errands.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 10),
-            itemBuilder: (context, index) {
-              return _ErrandListTile(errand: errands[index]);
-            },
-          );
-        },
+          },
+        ),
       ),
+    );
+  }
+}
+
+class _ScrollableMessage extends StatelessWidget {
+  const _ScrollableMessage({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.62,
+          child: Center(
+            child: Padding(padding: const EdgeInsets.all(24), child: child),
+          ),
+        ),
+      ],
     );
   }
 }

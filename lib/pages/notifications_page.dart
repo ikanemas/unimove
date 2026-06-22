@@ -15,6 +15,7 @@ class NotificationsPage extends StatefulWidget {
 class _NotificationsPageState extends State<NotificationsPage> {
   final _database = DatabaseService.instance;
   late Future<List<AppNotification>> _notifications;
+  List<AppNotification> _cachedNotifications = [];
 
   String get _userId => SupabaseService.client.auth.currentUser?.id ?? '';
 
@@ -38,12 +39,27 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   void _reload() {
     if (!mounted) return;
-    setState(() => _notifications = _loadNotifications());
+    setState(() {
+      _notifications = _loadNotifications();
+    });
+  }
+
+  void _setCachedNotifications(List<AppNotification> notifications) {
+    _cachedNotifications = notifications;
+    setState(() {
+      _notifications = Future.value(notifications);
+    });
   }
 
   Future<void> _openNotification(AppNotification notification) async {
     if (!notification.isRead) {
       await _database.markNotificationRead(notification.id);
+      if (mounted) {
+        _setCachedNotifications([
+          for (final item in _cachedNotifications)
+            item.id == notification.id ? item.copyWith(isRead: true) : item,
+        ]);
+      }
     }
     if (!mounted) return;
     await Navigator.push(
@@ -55,7 +71,13 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   Future<void> _markAllRead() async {
+    if (_userId.isEmpty) return;
     await _database.markAllNotificationsRead(_userId);
+    if (!mounted) return;
+    _setCachedNotifications([
+      for (final notification in _cachedNotifications)
+        notification.copyWith(isRead: true),
+    ]);
   }
 
   @override
@@ -81,6 +103,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
           }
 
           final notifications = snapshot.data ?? [];
+          _cachedNotifications = notifications;
           if (notifications.isEmpty) {
             return const Center(
               child: Column(

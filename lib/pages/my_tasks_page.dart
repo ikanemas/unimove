@@ -76,7 +76,9 @@ class _AssignedTasksTabState extends State<_AssignedTasksTab> {
 
   void _reload() {
     if (!mounted) return;
-    setState(() => _tasks = _loadTasks());
+    setState(() {
+      _tasks = _loadTasks();
+    });
   }
 
   Future<void> _markCompleted(Errand errand) async {
@@ -232,7 +234,9 @@ class _MyOffersTabState extends State<_MyOffersTab> {
 
   void _reload() {
     if (!mounted) return;
-    setState(() => _offers = _loadOffers());
+    setState(() {
+      _offers = _loadOffers();
+    });
   }
 
   @override

@@ -42,15 +42,21 @@ class Errand {
       timeToComplete: map['time_to_complete'] as String,
       status: map['status'] as String,
       createdAt: DateTime.parse(map['created_at'] as String),
-      posterId: map['poster_id'] as String?,
+      posterId: (map['poster_id'] ?? map['user_id']) as String?,
       posterName: map['poster_name'] as String?,
       runnerId: map['runner_id'] as String?,
       runnerName: map['runner_name'] as String?,
       acceptedAt: map['accepted_at'] == null
           ? null
           : DateTime.parse(map['accepted_at'] as String),
-      isSeed: ((map['is_seed'] as int?) ?? 0) == 1,
+      isSeed: _readBool(map['is_seed']),
     );
+  }
+
+  static bool _readBool(Object? value) {
+    if (value is bool) return value;
+    if (value is int) return value == 1;
+    return false;
   }
 
   Map<String, Object?> toMap() {

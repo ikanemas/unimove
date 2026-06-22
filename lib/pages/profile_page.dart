@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/supabase_service.dart';
 import 'errand_history_page.dart';
-import 'login_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -19,7 +18,6 @@ class _ProfilePageState extends State<ProfilePage> {
       TextEditingController();
 
   String? email;
-  String? role;
   String? name;
   String? phoneNumber;
 
@@ -28,6 +26,7 @@ class _ProfilePageState extends State<ProfilePage> {
   bool hidePassword = true;
   bool hideConfirmPassword = true;
   bool isUpdating = false;
+  bool isLoggingOut = false;
 
   @override
   void initState() {
@@ -45,7 +44,6 @@ class _ProfilePageState extends State<ProfilePage> {
         email = user.email ?? 'No email';
         name =
             user.userMetadata?['name'] ?? user.userMetadata?['full_name'] ?? '';
-        role = user.userMetadata?['role'] ?? 'No role';
         phoneNumber = user.userMetadata?['phone_number'] ?? '';
 
         nameController.text = name ?? '';
@@ -175,7 +173,9 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _logout() async {
-    showDialog(
+    if (isLoggingOut) return;
+
+    final shouldLogout = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
@@ -186,36 +186,35 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
+              onPressed: () => Navigator.pop(dialogContext, false),
               child: const Text('Cancel'),
             ),
             TextButton(
-              onPressed: () async {
-                Navigator.pop(dialogContext);
-                try {
-                  await SupabaseService.client.auth.signOut();
-                  if (!mounted) return;
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (_) => const LoginPage()),
-                    (route) => false,
-                  );
-                } catch (e) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Logout error: ${e.toString()}'),
-                      backgroundColor: Colors.redAccent,
-                    ),
-                  );
-                }
-              },
+              onPressed: () => Navigator.pop(dialogContext, true),
               child: const Text('Logout', style: TextStyle(color: Colors.red)),
             ),
           ],
         );
       },
     );
+
+    if (shouldLogout != true || !mounted) return;
+
+    setState(() => isLoggingOut = true);
+    try {
+      await SupabaseService.client.auth.signOut();
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => isLoggingOut = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Logout error: ${e.toString()}'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
   }
 
   @override
@@ -287,27 +286,6 @@ class _ProfilePageState extends State<ProfilePage> {
                               color: Colors.white,
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 15,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(
-                                0xFFffc95c,
-                              ).withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              role ?? 'No Role',
-                              style: const TextStyle(
-                                color: Color(0xFFffc95c),
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
                             ),
                           ),
                           const SizedBox(height: 5),
@@ -405,16 +383,6 @@ class _ProfilePageState extends State<ProfilePage> {
                           label: 'Email',
                           icon: Icons.email_outlined,
                           value: email ?? 'No Email',
-                          isEditing: false,
-                        ),
-
-                        const SizedBox(height: 15),
-
-                        // Role (Non-editable)
-                        _buildInfoRow(
-                          label: 'Role',
-                          icon: Icons.badge_outlined,
-                          value: role ?? 'No Role',
                           isEditing: false,
                         ),
 

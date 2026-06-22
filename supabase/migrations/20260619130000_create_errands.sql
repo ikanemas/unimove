@@ -7,6 +7,7 @@ create table if not exists public.errands (
   status text not null default 'Open'
     check (status in ('Open', 'Completed', 'Closed')),
   created_at timestamptz not null default now(),
+  user_id uuid references auth.users(id) on delete set null,
   poster_id uuid references auth.users(id) on delete set null,
   poster_name text,
   is_seed boolean not null default false

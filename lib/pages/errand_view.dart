@@ -73,7 +73,9 @@ class _ErrandViewState extends State<ErrandView> {
         return;
       }
 
-      setState(() => _myOffer = _loadMyOffer());
+      setState(() {
+        _myOffer = _loadMyOffer();
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Request sent. Waiting for the seller.')),
       );

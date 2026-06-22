@@ -4,11 +4,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'pages/app_shell.dart';
 import 'pages/login_page.dart';
-import 'services/database_initializer.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await initializeDatabase();
 
   await Supabase.initialize(
     url: 'https://hkyipemvlhqmyhnawkix.supabase.co',

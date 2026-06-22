@@ -44,7 +44,9 @@ class _OffersPageState extends State<OffersPage> {
 
   void _reload() {
     if (!mounted) return;
-    setState(() => _offers = _loadOffers());
+    setState(() {
+      _offers = _loadOffers();
+    });
   }
 
   Future<void> _accept(ErrandOffer offer) async {

@@ -9,7 +9,9 @@ import '../widgets/notification_button.dart';
 import 'offers_page.dart';
 
 class AddErrandPage extends StatefulWidget {
-  const AddErrandPage({super.key});
+  const AddErrandPage({super.key, this.refreshVersion = 0});
+
+  final int refreshVersion;
 
   @override
   State<AddErrandPage> createState() => _AddErrandPageState();
@@ -18,6 +20,8 @@ class AddErrandPage extends StatefulWidget {
 class _AddErrandPageState extends State<AddErrandPage> {
   final _database = DatabaseService.instance;
   late Future<List<Errand>> _errands;
+  List<Errand> _cachedErrands = [];
+  bool _formOpen = false;
   int? _updatingErrandId;
 
   User? get _user => SupabaseService.client.auth.currentUser;
@@ -40,6 +44,14 @@ class _AddErrandPageState extends State<AddErrandPage> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant AddErrandPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshVersion != widget.refreshVersion) {
+      _errands = _loadErrands();
+    }
+  }
+
   Future<List<Errand>> _loadErrands() {
     if (_userId.isEmpty) return Future.value([]);
     return _database.getUserPostedErrands(_userId);
@@ -47,7 +59,57 @@ class _AddErrandPageState extends State<AddErrandPage> {
 
   void _refresh() {
     if (!mounted) return;
-    setState(() => _errands = _loadErrands());
+    if (_formOpen) return;
+    _refreshErrands(showLoading: _cachedErrands.isEmpty);
+  }
+
+  List<Errand> _withSavedErrand(Errand savedErrand, List<Errand> errands) {
+    return [
+      savedErrand,
+      for (final errand in errands)
+        if (errand.id != savedErrand.id) errand,
+    ];
+  }
+
+  void _showSavedErrand(Errand savedErrand) {
+    final errands = _withSavedErrand(savedErrand, _cachedErrands);
+    _cachedErrands = errands;
+    setState(() {
+      _errands = Future.value(errands);
+    });
+  }
+
+  Future<void> _refreshErrands({
+    Errand? includeErrand,
+    bool showLoading = true,
+  }) async {
+    final errands = _loadErrands().then((rows) {
+      final nextErrands = includeErrand == null
+          ? rows
+          : _withSavedErrand(includeErrand, rows);
+      _cachedErrands = nextErrands;
+      return nextErrands;
+    });
+
+    if (showLoading && mounted) {
+      setState(() {
+        _errands = errands;
+      });
+    }
+
+    try {
+      final loadedErrands = await errands;
+      if (!mounted) return;
+      setState(() {
+        _errands = Future.value(loadedErrands);
+      });
+    } catch (_) {
+      if (showLoading && mounted) {
+        setState(() {
+          _errands = errands;
+        });
+      }
+    }
   }
 
   Future<void> _showForm([Errand? errand]) async {
@@ -60,13 +122,31 @@ class _AddErrandPageState extends State<AddErrandPage> {
       return;
     }
 
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) =>
-          _ErrandForm(errand: errand, posterId: _userId, posterName: _userName),
-    );
+    Object? result;
+    _formOpen = true;
+    try {
+      result = await showModalBottomSheet<Object?>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (_) => _ErrandForm(
+          errand: errand,
+          posterId: _userId,
+          posterName: _userName,
+        ),
+      );
+    } finally {
+      _formOpen = false;
+    }
+
+    if (!mounted) return;
+
+    if (result is Errand) {
+      _showSavedErrand(result);
+      await _refreshErrands(includeErrand: result, showLoading: false);
+    } else if (result == true) {
+      await _refreshErrands(showLoading: false);
+    }
   }
 
   Future<void> _setStatus(Errand errand, String status) async {
@@ -129,116 +209,125 @@ class _AddErrandPageState extends State<AddErrandPage> {
           ),
         ],
       ),
-      body: FutureBuilder<List<Errand>>(
-        future: _errands,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return const Center(child: Text('Unable to load your errands.'));
-          }
+      body: RefreshIndicator(
+        onRefresh: _refreshErrands,
+        child: FutureBuilder<List<Errand>>(
+          future: _errands,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const _ScrollableMessage(
+                child: CircularProgressIndicator(),
+              );
+            }
+            if (snapshot.hasError) {
+              return const _ScrollableMessage(
+                child: Text('Unable to load your errands.'),
+              );
+            }
 
-          final errands = snapshot.data ?? [];
-          if (errands.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.assignment_outlined, size: 56),
-                  const SizedBox(height: 12),
-                  const Text('You have not posted any errands yet.'),
-                  const SizedBox(height: 18),
-                  FilledButton.icon(
-                    onPressed: _showForm,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Post errand'),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-            itemCount: errands.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 10),
-            itemBuilder: (context, index) {
-              final errand = errands[index];
-              return Card(
-                margin: EdgeInsets.zero,
-                child: ListTile(
-                  contentPadding: const EdgeInsets.fromLTRB(16, 10, 6, 10),
-                  title: Text(
-                    errand.title,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      '${errand.displayStatus}  |  RM ${errand.reward.toStringAsFixed(2)}'
-                      '\n${errand.timeToComplete}',
+            final errands = snapshot.data ?? [];
+            _cachedErrands = errands;
+            if (errands.isEmpty) {
+              return _ScrollableMessage(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.assignment_outlined, size: 56),
+                    const SizedBox(height: 12),
+                    const Text('You have not posted any errands yet.'),
+                    const SizedBox(height: 18),
+                    FilledButton.icon(
+                      onPressed: _showForm,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Post errand'),
                     ),
-                  ),
-                  isThreeLine: true,
-                  trailing: _updatingErrandId == errand.id
-                      ? const SizedBox.square(
-                          dimension: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : PopupMenuButton<String>(
-                          tooltip: 'Errand actions',
-                          onSelected: (action) {
-                            if (action == 'edit') {
-                              _showForm(errand);
-                            } else if (action == 'offers') {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute<void>(
-                                  builder: (_) => OffersPage(
-                                    errandId: errand.id!,
-                                    errandTitle: errand.title,
-                                  ),
-                                ),
-                              );
-                            } else if (action == 'delete') {
-                              _delete(errand);
-                            } else {
-                              _setStatus(errand, action);
-                            }
-                          },
-                          itemBuilder: (_) => [
-                            const PopupMenuItem(
-                              value: 'edit',
-                              child: Text('Edit'),
-                            ),
-                            if (errand.status == 'Open')
-                              const PopupMenuItem(
-                                value: 'offers',
-                                child: Text('View runner requests'),
-                              ),
-                            for (final status in [
-                              'Open',
-                              'Completed',
-                              'Closed',
-                            ])
-                              PopupMenuItem(
-                                value: status,
-                                enabled: errand.status != status,
-                                child: Text('Mark $status'),
-                              ),
-                            const PopupMenuDivider(),
-                            const PopupMenuItem(
-                              value: 'delete',
-                              child: Text('Delete'),
-                            ),
-                          ],
-                        ),
+                  ],
                 ),
               );
-            },
-          );
-        },
+            }
+
+            return ListView.separated(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+              itemCount: errands.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final errand = errands[index];
+                return Card(
+                  margin: EdgeInsets.zero,
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.fromLTRB(16, 10, 6, 10),
+                    title: Text(
+                      errand.title,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        '${errand.displayStatus}  |  RM ${errand.reward.toStringAsFixed(2)}'
+                        '\n${errand.timeToComplete}',
+                      ),
+                    ),
+                    isThreeLine: true,
+                    trailing: _updatingErrandId == errand.id
+                        ? const SizedBox.square(
+                            dimension: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : PopupMenuButton<String>(
+                            tooltip: 'Errand actions',
+                            onSelected: (action) {
+                              if (action == 'edit') {
+                                _showForm(errand);
+                              } else if (action == 'offers') {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => OffersPage(
+                                      errandId: errand.id!,
+                                      errandTitle: errand.title,
+                                    ),
+                                  ),
+                                );
+                              } else if (action == 'delete') {
+                                _delete(errand);
+                              } else {
+                                _setStatus(errand, action);
+                              }
+                            },
+                            itemBuilder: (_) => [
+                              const PopupMenuItem(
+                                value: 'edit',
+                                child: Text('Edit'),
+                              ),
+                              if (errand.status == 'Open')
+                                const PopupMenuItem(
+                                  value: 'offers',
+                                  child: Text('View runner requests'),
+                                ),
+                              for (final status in [
+                                'Open',
+                                'Completed',
+                                'Closed',
+                              ])
+                                PopupMenuItem(
+                                  value: status,
+                                  enabled: errand.status != status,
+                                  child: Text('Mark $status'),
+                                ),
+                              const PopupMenuDivider(),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Text('Delete'),
+                              ),
+                            ],
+                          ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showForm,
@@ -313,7 +402,7 @@ class _ErrandFormState extends State<_ErrandForm> {
     try {
       final database = DatabaseService.instance;
       if (widget.errand == null) {
-        await database.insertErrand(
+        final savedErrand = await database.insertErrand(
           title: _title.text.trim(),
           reward: double.parse(_reward.text.trim()),
           description: _description.text.trim(),
@@ -321,6 +410,8 @@ class _ErrandFormState extends State<_ErrandForm> {
           posterId: widget.posterId,
           posterName: widget.posterName,
         );
+        if (!mounted) return;
+        Navigator.pop(context, savedErrand);
       } else {
         await database.updateErrand(
           id: widget.errand!.id!,
@@ -331,10 +422,9 @@ class _ErrandFormState extends State<_ErrandForm> {
           timeToComplete: _time.text.trim(),
           status: _status,
         );
+        if (!mounted) return;
+        Navigator.pop(context, true);
       }
-
-      if (!mounted) return;
-      Navigator.pop(context);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -458,6 +548,27 @@ class _ErrandFormState extends State<_ErrandForm> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ScrollableMessage extends StatelessWidget {
+  const _ScrollableMessage({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.62,
+          child: Center(
+            child: Padding(padding: const EdgeInsets.all(24), child: child),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -22,10 +22,12 @@ class _NotificationButtonState extends State<NotificationButton> {
     super.initState();
     _unreadCount = _loadUnreadCount();
     _database.changes.addListener(_reload);
+    _database.unreadNotificationCount.addListener(_useLatestUnreadCount);
   }
 
   @override
   void dispose() {
+    _database.unreadNotificationCount.removeListener(_useLatestUnreadCount);
     _database.changes.removeListener(_reload);
     super.dispose();
   }
@@ -37,7 +39,17 @@ class _NotificationButtonState extends State<NotificationButton> {
 
   void _reload() {
     if (!mounted) return;
-    setState(() => _unreadCount = _loadUnreadCount());
+    setState(() {
+      _unreadCount = _loadUnreadCount();
+    });
+  }
+
+  void _useLatestUnreadCount() {
+    final count = _database.unreadNotificationCount.value;
+    if (!mounted || count == null) return;
+    setState(() {
+      _unreadCount = Future.value(count);
+    });
   }
 
   @override

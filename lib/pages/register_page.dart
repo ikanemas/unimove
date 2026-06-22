@@ -17,11 +17,11 @@ class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-  final TextEditingController confirmPasswordController = TextEditingController();
+  final TextEditingController confirmPasswordController =
+      TextEditingController();
 
   bool hidePassword = true;
   bool hideConfirmPassword = true;
-  String selectedRole = "Student";
   bool isLoading = false;
 
   Future<void> register() async {
@@ -40,14 +40,11 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() => isLoading = true);
 
     try {
-      // ✅ Register with metadata - trigger will handle profile creation
+      // Register with metadata - trigger will handle profile creation.
       final response = await SupabaseService.client.auth.signUp(
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
-        data: {
-          'name': nameController.text.trim(),
-          'role': selectedRole,
-        },
+        data: {'name': nameController.text.trim()},
       );
 
       if (!mounted) return;
@@ -61,7 +58,7 @@ class _RegisterPageState extends State<RegisterPage> {
             behavior: SnackBarBehavior.floating,
           ),
         );
-        
+
         // Wait a moment then go back to login
         Future.delayed(const Duration(milliseconds: 500), () {
           if (mounted) Navigator.pop(context);
@@ -82,7 +79,7 @@ class _RegisterPageState extends State<RegisterPage> {
       if (message.contains('already registered')) {
         message = 'This email is already registered. Please login instead.';
       }
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
@@ -196,10 +193,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       const SizedBox(height: 10),
                       const Text(
                         "Join us and start your journey",
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                        ),
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
                       ),
                       const SizedBox(height: 40),
 
@@ -252,7 +246,9 @@ class _RegisterPageState extends State<RegisterPage> {
                         decoration: input("Password", Icons.lock).copyWith(
                           suffixIcon: IconButton(
                             icon: Icon(
-                              hidePassword ? Icons.visibility_off : Icons.visibility,
+                              hidePassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
                               color: AppColors.primary,
                             ),
                             onPressed: () {
@@ -274,50 +270,26 @@ class _RegisterPageState extends State<RegisterPage> {
                           }
                           return null;
                         },
-                        decoration: input("Confirm Password", Icons.lock).copyWith(
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              hideConfirmPassword ? Icons.visibility_off : Icons.visibility,
-                              color: AppColors.primary,
+                        decoration: input("Confirm Password", Icons.lock)
+                            .copyWith(
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  hideConfirmPassword
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                  color: AppColors.primary,
+                                ),
+                                onPressed: () {
+                                  setState(
+                                    () => hideConfirmPassword =
+                                        !hideConfirmPassword,
+                                  );
+                                },
+                              ),
                             ),
-                            onPressed: () {
-                              setState(() => hideConfirmPassword = !hideConfirmPassword);
-                            },
-                          ),
-                        ),
                       ),
                       const SizedBox(height: 20),
 
-                      // Role Dropdown
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedRole,
-                        decoration: input("Select Role", Icons.people),
-                        items: const [
-                          DropdownMenuItem(
-                            value: "Student",
-                            child: Row(
-                              children: [
-                                Icon(Icons.school, size: 20, color: Colors.blue),
-                                SizedBox(width: 8),
-                                Text("Student"),
-                              ],
-                            ),
-                          ),
-                          DropdownMenuItem(
-                            value: "Runner",
-                            child: Row(
-                              children: [
-                                Icon(Icons.run_circle, size: 20, color: Colors.green),
-                                SizedBox(width: 8),
-                                Text("Runner"),
-                              ],
-                            ),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          setState(() => selectedRole = value!);
-                        },
-                      ),
                       const SizedBox(height: 30),
 
                       // Register Button
@@ -331,7 +303,9 @@ class _RegisterPageState extends State<RegisterPage> {
                               borderRadius: BorderRadius.circular(15),
                             ),
                             elevation: 4,
-                            shadowColor: AppColors.orange.withValues(alpha: 0.3),
+                            shadowColor: AppColors.orange.withValues(
+                              alpha: 0.3,
+                            ),
                           ),
                           onPressed: isLoading ? null : register,
                           child: isLoading
