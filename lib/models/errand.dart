@@ -7,6 +7,14 @@ class Errand {
     required this.timeToComplete,
     required this.status,
     required this.createdAt,
+    this.posterId,
+    this.posterName,
+    this.posterPhone,
+    this.runnerId,
+    this.runnerName,
+    this.runnerPhone,
+    this.acceptedAt,
+    this.isSeed = false,
   });
 
   final int? id;
@@ -16,6 +24,18 @@ class Errand {
   final String timeToComplete;
   final String status;
   final DateTime createdAt;
+  final String? posterId;
+  final String? posterName;
+  final String? posterPhone;
+  final String? runnerId;
+  final String? runnerName;
+  final String? runnerPhone;
+  final DateTime? acceptedAt;
+  final bool isSeed;
+
+  bool get isAssigned => runnerId != null && runnerId!.isNotEmpty;
+  String get displayStatus =>
+      status == 'Open' && isAssigned ? 'Accepted' : status;
 
   factory Errand.fromMap(Map<String, Object?> map) {
     return Errand(
@@ -26,6 +46,16 @@ class Errand {
       timeToComplete: map['time_to_complete'] as String,
       status: map['status'] as String,
       createdAt: DateTime.parse(map['created_at'] as String),
+      posterId: map['poster_id'] as String?,
+      posterName: map['poster_name'] as String?,
+      posterPhone: map['poster_phone'] as String?,
+      runnerId: map['runner_id'] as String?,
+      runnerName: map['runner_name'] as String?,
+      runnerPhone: map['runner_phone'] as String?,
+      acceptedAt: map['accepted_at'] == null
+          ? null
+          : DateTime.parse(map['accepted_at'] as String),
+      isSeed: ((map['is_seed'] as int?) ?? 0) == 1,
     );
   }
 
@@ -38,6 +68,14 @@ class Errand {
       'time_to_complete': timeToComplete,
       'status': status,
       'created_at': createdAt.toIso8601String(),
+      'poster_id': posterId,
+      'poster_name': posterName,
+      'poster_phone': posterPhone,
+      'runner_id': runnerId,
+      'runner_name': runnerName,
+      'runner_phone': runnerPhone,
+      'accepted_at': acceptedAt?.toIso8601String(),
+      'is_seed': isSeed ? 1 : 0,
     };
   }
 }

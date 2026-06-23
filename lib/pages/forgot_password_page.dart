@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../theme/app_colors.dart';
+import '../services/supabase_service.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
 
   @override
-  State<ForgotPasswordPage> createState() => _ForgotPasswordPageState();
+  State<ForgotPasswordPage> createState() =>
+      _ForgotPasswordPageState();
 }
 
-class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
+class _ForgotPasswordPageState
+    extends State<ForgotPasswordPage> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController emailController = TextEditingController();
+  final TextEditingController emailController =
+      TextEditingController();
 
   @override
   void dispose() {
@@ -18,11 +24,34 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     super.dispose();
   }
 
-  void resetPassword() {
-    if (_formKey.currentState!.validate()) {
+  Future<void> resetPassword() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    try {
+      await SupabaseService.client.auth
+          .resetPasswordForEmail(
+        emailController.text.trim(),
+      );
+
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Password reset link sent"),
+          content: Text(
+            'Password reset email sent',
+          ),
+        ),
+      );
+    } on AuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
         ),
       );
     }
@@ -31,6 +60,20 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(
+            Icons.arrow_back,
+            color: Colors.white,
+          ),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
+      ),
+      extendBodyBehindAppBar: true,
       resizeToAvoidBottomInset: true,
       body: Container(
         width: double.infinity,
@@ -45,13 +88,15 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
             end: Alignment.bottomCenter,
           ),
         ),
-
         child: SafeArea(
           child: SingleChildScrollView(
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                minHeight: MediaQuery.of(context).size.height -
-                    MediaQuery.of(context).padding.top,
+                minHeight:
+                    MediaQuery.of(context).size.height -
+                        MediaQuery.of(context)
+                            .padding
+                            .top,
               ),
               child: IntrinsicHeight(
                 child: Padding(
@@ -59,7 +104,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                   child: Form(
                     key: _formKey,
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisAlignment:
+                          MainAxisAlignment.center,
                       children: [
                         const Icon(
                           Icons.lock_reset,
@@ -74,7 +120,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 32,
-                            fontWeight: FontWeight.bold,
+                            fontWeight:
+                                FontWeight.bold,
                           ),
                         ),
 
@@ -93,7 +140,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                         TextFormField(
                           controller: emailController,
                           validator: (value) {
-                            if (value == null || value.isEmpty) {
+                            if (value == null ||
+                                value.isEmpty) {
                               return "Please enter your email";
                             }
                             return null;
@@ -102,9 +150,13 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                             filled: true,
                             fillColor: Colors.white,
                             hintText: "Email",
-                            prefixIcon: const Icon(Icons.email),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(15),
+                            prefixIcon:
+                                const Icon(Icons.email),
+                            border:
+                                OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.circular(
+                                      15),
                             ),
                           ),
                         ),
@@ -115,18 +167,25 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                           width: double.infinity,
                           height: 55,
                           child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.orange,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(15),
+                            style:
+                                ElevatedButton.styleFrom(
+                              backgroundColor:
+                                  AppColors.orange,
+                              shape:
+                                  RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius
+                                        .circular(15),
                               ),
                             ),
-                            onPressed: resetPassword,
+                            onPressed:
+                                resetPassword,
                             child: const Text(
                               "SEND RESET LINK",
                               style: TextStyle(
                                 color: Colors.white,
-                                fontWeight: FontWeight.bold,
+                                fontWeight:
+                                    FontWeight.bold,
                               ),
                             ),
                           ),
@@ -136,12 +195,14 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
                         TextButton(
                           onPressed: () {
-                            Navigator.pop(context);
+                            Navigator.pop(
+                                context);
                           },
                           child: const Text(
                             "Back to Login",
                             style: TextStyle(
-                              color: AppColors.gold,
+                              color:
+                                  AppColors.gold,
                             ),
                           ),
                         ),

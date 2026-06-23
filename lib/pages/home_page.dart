@@ -13,11 +13,24 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   late Future<List<Errand>> _errandsFuture;
+  final _databaseService = DatabaseService.instance;
 
   @override
   void initState() {
     super.initState();
-    _errandsFuture = DatabaseService.instance.getErrands();
+    _errandsFuture = _databaseService.getOpenErrands();
+    _databaseService.changes.addListener(_reload);
+  }
+
+  @override
+  void dispose() {
+    _databaseService.changes.removeListener(_reload);
+    super.dispose();
+  }
+
+  void _reload() {
+    if (!mounted) return;
+    setState(() => _errandsFuture = _databaseService.getOpenErrands());
   }
 
   @override
