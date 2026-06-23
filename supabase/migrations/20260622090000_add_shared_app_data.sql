@@ -7,9 +7,11 @@ alter table public.errands
   add column if not exists user_id uuid references auth.users(id) on delete set null,
   add column if not exists poster_id uuid references auth.users(id) on delete set null,
   add column if not exists poster_name text,
+  add column if not exists poster_phone text,
   add column if not exists is_seed boolean not null default false,
   add column if not exists runner_id uuid references auth.users(id) on delete set null,
   add column if not exists runner_name text,
+  add column if not exists runner_phone text,
   add column if not exists accepted_at timestamptz;
 
 alter table public.errands
@@ -51,6 +53,7 @@ create table if not exists public.errand_offers (
   errand_id bigint not null references public.errands(id) on delete cascade,
   runner_id uuid not null references auth.users(id) on delete cascade,
   runner_name text not null,
+  runner_phone text,
   message text not null,
   proposed_reward numeric(10, 2) not null,
   estimated_time text not null,
@@ -59,6 +62,9 @@ create table if not exists public.errand_offers (
   created_at timestamptz not null default now(),
   unique (errand_id, runner_id)
 );
+
+alter table public.errand_offers
+  add column if not exists runner_phone text;
 
 create table if not exists public.notifications (
   id bigint generated always as identity primary key,

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart'; // 🔥 FIX 1: Import url_launcher diperlukan di sini
 
 import '../models/errand.dart';
 import '../models/errand_offer.dart';
@@ -32,6 +34,10 @@ class _ErrandViewState extends State<ErrandView> {
     return user?.email ?? 'UniMove User';
   }
 
+  String? get _userPhone =>
+      SupabaseService.client.auth.currentUser?.userMetadata?['phone_number']
+          as String?;
+
   @override
   void initState() {
     super.initState();
@@ -47,8 +53,128 @@ class _ErrandViewState extends State<ErrandView> {
     );
   }
 
+  // FIX 2: Letakkan fungsi helper WhatsApp yang selamat terus di dalam fail ini
+  Future<void> _openWhatsAppChat({
+    required String? phoneNumber,
+    required String message,
+  }) async {
+    if (phoneNumber == null || phoneNumber.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Contact phone number not available.')),
+      );
+      return;
+    }
+
+    String cleanPhone = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+    if (!cleanPhone.startsWith('+') && !cleanPhone.startsWith('6')) {
+      cleanPhone = '6$cleanPhone'; // Format default kod negara Malaysia
+    }
+
+    final Uri whatsappUri = Uri.parse(
+      'https://wa.me/$cleanPhone?text=${Uri.encodeComponent(message)}',
+    );
+
+    if (await canLaunchUrl(whatsappUri)) {
+      await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open WhatsApp app.')),
+        );
+      }
+    }
+  }
+
+  Future<String?> _ensureRunnerPhone() async {
+    if (_userPhone != null && _userPhone!.trim().isNotEmpty) {
+      return _userPhone;
+    }
+
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        final TextEditingController phoneController = TextEditingController();
+        final formKey = GlobalKey<FormState>();
+
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
+          title: const Text(
+            'Phone Number Required',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Please register your phone number first so the poster can contact you via WhatsApp later.',
+                  style: TextStyle(color: Colors.grey, fontSize: 14),
+                ),
+                const SizedBox(height: 15),
+                TextFormField(
+                  controller: phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    labelText: 'Your Phone Number',
+                    hintText: 'e.g., 60123456789',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.phone),
+                  ),
+                  validator: (value) => (value == null || value.trim().isEmpty)
+                      ? 'Cannot be empty'
+                      : null,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, null),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF643D),
+              ),
+              onPressed: () async {
+                if (formKey.currentState!.validate()) {
+                  final inputPhone = phoneController.text.trim();
+                  try {
+                    await SupabaseService.client.auth.updateUser(
+                      UserAttributes(data: {'phone_number': inputPhone}),
+                    );
+                    if (context.mounted)
+                      Navigator.pop(dialogContext, inputPhone);
+                  } catch (e) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  }
+                }
+              },
+              child: const Text(
+                'Save & Request',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _submitRequest(Errand errand) async {
     if (_submittingRequest) return;
+
+    final validPhone = await _ensureRunnerPhone();
+    if (validPhone == null) return;
+
     setState(() => _submittingRequest = true);
 
     try {
@@ -56,6 +182,7 @@ class _ErrandViewState extends State<ErrandView> {
         errandId: errand.id!,
         runnerId: _userId,
         runnerName: _userName,
+        runnerPhone: validPhone,
         message: 'I can complete this errand using the original terms.',
         proposedReward: errand.reward,
         estimatedTime: errand.timeToComplete,
@@ -73,9 +200,11 @@ class _ErrandViewState extends State<ErrandView> {
         return;
       }
 
+      final freshOffer = _loadMyOffer();
       setState(() {
-        _myOffer = _loadMyOffer();
+        _myOffer = freshOffer;
       });
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Request sent. Waiting for the seller.')),
       );
@@ -132,7 +261,7 @@ class _ErrandViewState extends State<ErrandView> {
               _DetailRow(
                 icon: Icons.schedule_outlined,
                 label: 'Time to complete',
-                value: errand.timeToComplete,
+                value: errand.timeToComplete ?? 'Not specified',
               ),
               const SizedBox(height: 12),
               _DetailRow(
@@ -157,11 +286,13 @@ class _ErrandViewState extends State<ErrandView> {
               ),
               const SizedBox(height: 8),
               Text(
-                errand.description,
+                errand.description ?? 'No description provided.',
                 style: Theme.of(
                   context,
                 ).textTheme.bodyLarge?.copyWith(height: 1.45),
               ),
+
+              // ================= PANARAN PERSPEKTIF RUNNER =================
               if (canMakeOffer) ...[
                 const SizedBox(height: 28),
                 FutureBuilder<ErrandOffer?>(
@@ -173,16 +304,49 @@ class _ErrandViewState extends State<ErrandView> {
                       return const Center(child: CircularProgressIndicator());
                     }
                     if (offer?.status == 'Pending') {
-                      return _OfferStatusPanel(
+                      return const _OfferStatusPanel(
                         status: 'Pending',
                         message:
                             'Your request has been sent. Waiting for the seller.',
                       );
                     }
+
+                    // FIX 3: Tambah butang WhatsApp untuk Runner menghubungi Poster selepas diterima
                     if (offer?.status == 'Accepted') {
-                      return _OfferStatusPanel(
-                        status: 'Accepted',
-                        message: 'Your request was accepted. Check My Tasks.',
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const _OfferStatusPanel(
+                            status: 'Accepted',
+                            message:
+                                'Your request was accepted. Check My Tasks.',
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            height: 52,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF25D366),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              onPressed: () => _openWhatsAppChat(
+                                phoneNumber: errand.posterPhone,
+                                message:
+                                    'Hello! My request for your errand "${errand.title}" has been accepted. Let\'s coordinate!',
+                              ),
+                              icon: const Icon(Icons.chat, color: Colors.white),
+                              label: const Text(
+                                'Chat with Poster (WhatsApp)',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       );
                     }
 
@@ -200,6 +364,9 @@ class _ErrandViewState extends State<ErrandView> {
                         SizedBox(
                           height: 52,
                           child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFFFF643D),
+                            ),
                             onPressed: _submittingRequest
                                 ? null
                                 : () => _submitRequest(errand),
@@ -208,10 +375,11 @@ class _ErrandViewState extends State<ErrandView> {
                                     dimension: 18,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
+                                      color: Colors.white,
                                     ),
                                   )
                                 : const Icon(Icons.volunteer_activism_outlined),
-                            label: const Text('I Can Do This'),
+                            label: const Text('Request Errand'),
                           ),
                         ),
                       ],
@@ -219,26 +387,58 @@ class _ErrandViewState extends State<ErrandView> {
                   },
                 ),
               ],
-              if (isOwner && errand.status == 'Open') ...[
-                const SizedBox(height: 20),
-                SizedBox(
-                  height: 52,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (_) => OffersPage(
-                            errandId: errand.id!,
-                            errandTitle: errand.title,
-                          ),
+
+              // ================= PAPARAN PERSPEKTIF POSTER (OWNER) =================
+              if (isOwner) ...[
+                if (errand.isAssigned) ...[
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF25D366),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                      );
-                    },
-                    icon: const Icon(Icons.groups_outlined),
-                    label: const Text('View Runner Requests'),
+                      ),
+                      onPressed: () => _openWhatsAppChat(
+                        phoneNumber: errand.runnerPhone,
+                        message:
+                            'Hello ${errand.runnerName}! I am the creator of the errand: "${errand.title}". Let\'s coordinate our task.',
+                      ),
+                      icon: const Icon(Icons.chat, color: Colors.white),
+                      label: const Text(
+                        'Chat with Assigned Runner',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                ],
+
+                if (errand.status == 'Open') ...[
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    height: 52,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => OffersPage(
+                              errandId: errand.id!,
+                              errandTitle: errand.title,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.groups_outlined),
+                      label: const Text('View Runner Requests'),
+                    ),
+                  ),
+                ],
               ],
             ],
           );
@@ -259,9 +459,7 @@ class _OfferStatusPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Theme.of(
-          context,
-        ).colorScheme.primaryContainer.withValues(alpha: 0.5),
+        color: Theme.of(context).colorScheme.primaryContainer.withAlpha(128),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(

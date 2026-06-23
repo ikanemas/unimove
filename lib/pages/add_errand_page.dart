@@ -30,6 +30,8 @@ class _AddErrandPageState extends State<AddErrandPage> {
       (_user?.userMetadata?['name'] as String?)?.trim().isNotEmpty == true
       ? _user!.userMetadata!['name'] as String
       : (_user?.email ?? 'UniMove User');
+  String get _userPhone =>
+      (_user?.userMetadata?['phone_number'] as String?)?.trim() ?? '';
 
   @override
   void initState() {
@@ -133,6 +135,7 @@ class _AddErrandPageState extends State<AddErrandPage> {
           errand: errand,
           posterId: _userId,
           posterName: _userName,
+          posterPhone: _userPhone,
         ),
       );
     } finally {
@@ -342,11 +345,13 @@ class _ErrandForm extends StatefulWidget {
   const _ErrandForm({
     required this.posterId,
     required this.posterName,
+    required this.posterPhone,
     this.errand,
   });
 
   final String posterId;
   final String posterName;
+  final String posterPhone;
   final Errand? errand;
 
   @override
@@ -409,6 +414,7 @@ class _ErrandFormState extends State<_ErrandForm> {
           timeToComplete: _time.text.trim(),
           posterId: widget.posterId,
           posterName: widget.posterName,
+          posterPhone: widget.posterPhone,
         );
         if (!mounted) return;
         Navigator.pop(context, savedErrand);

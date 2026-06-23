@@ -9,8 +9,10 @@ class Errand {
     required this.createdAt,
     this.posterId,
     this.posterName,
+    this.posterPhone,
     this.runnerId,
     this.runnerName,
+    this.runnerPhone,
     this.acceptedAt,
     this.isSeed = false,
   });
@@ -24,8 +26,10 @@ class Errand {
   final DateTime createdAt;
   final String? posterId;
   final String? posterName;
+  final String? posterPhone;
   final String? runnerId;
   final String? runnerName;
+  final String? runnerPhone;
   final DateTime? acceptedAt;
   final bool isSeed;
 
@@ -44,8 +48,10 @@ class Errand {
       createdAt: DateTime.parse(map['created_at'] as String),
       posterId: (map['poster_id'] ?? map['user_id']) as String?,
       posterName: map['poster_name'] as String?,
+      posterPhone: map['poster_phone'] as String?,
       runnerId: map['runner_id'] as String?,
       runnerName: map['runner_name'] as String?,
+      runnerPhone: map['runner_phone'] as String?,
       acceptedAt: map['accepted_at'] == null
           ? null
           : DateTime.parse(map['accepted_at'] as String),
@@ -70,8 +76,10 @@ class Errand {
       'created_at': createdAt.toIso8601String(),
       'poster_id': posterId,
       'poster_name': posterName,
+      'poster_phone': posterPhone,
       'runner_id': runnerId,
       'runner_name': runnerName,
+      'runner_phone': runnerPhone,
       'accepted_at': acceptedAt?.toIso8601String(),
       'is_seed': isSeed ? 1 : 0,
     };

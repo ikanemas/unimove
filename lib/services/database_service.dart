@@ -67,6 +67,7 @@ class DatabaseService {
     required String timeToComplete,
     String? posterId,
     String? posterName,
+    String? posterPhone,
   }) async {
     final row = await SupabaseService.client
         .from('errands')
@@ -79,6 +80,7 @@ class DatabaseService {
           'user_id': posterId,
           'poster_id': posterId,
           'poster_name': posterName,
+          'poster_phone': posterPhone,
           'is_seed': false,
         })
         .select()
@@ -132,6 +134,7 @@ class DatabaseService {
     required String message,
     required double proposedReward,
     required String estimatedTime,
+    String? runnerPhone,
   }) async {
     final errand = await getErrand(errandId);
     if (errand == null ||
@@ -149,10 +152,12 @@ class DatabaseService {
       'errand_id': errandId,
       'runner_id': runnerId,
       'runner_name': runnerName,
+      'runner_phone': runnerPhone,
       'message': message,
       'proposed_reward': proposedReward,
       'estimated_time': estimatedTime,
       'status': 'Pending',
+      'created_at': DateTime.now().toIso8601String(),
     };
 
     if (existing == null) {
@@ -161,10 +166,7 @@ class DatabaseService {
         existing.status == 'Withdrawn') {
       await SupabaseService.client
           .from('errand_offers')
-          .update({
-            ...offerData,
-            'created_at': DateTime.now().toIso8601String(),
-          })
+          .update(offerData)
           .eq('id', existing.id)
           .eq('runner_id', runnerId);
     } else {
@@ -205,7 +207,7 @@ class DatabaseService {
   Future<List<ErrandOffer>> getOffersByRunner(String runnerId) async {
     final rows = await SupabaseService.client
         .from('errand_offers')
-        .select('*, errands!inner(title)')
+        .select('*, errands!inner(title, poster_phone)')
         .eq('runner_id', runnerId)
         .order('created_at', ascending: false);
 
@@ -214,6 +216,7 @@ class DatabaseService {
       final errand = mapped.remove('errands');
       if (errand is Map) {
         mapped['errand_title'] = errand['title'] as String?;
+        mapped['poster_phone'] = errand['poster_phone'] as String?;
       }
       return ErrandOffer.fromMap(mapped);
     }).toList();
@@ -235,6 +238,7 @@ class DatabaseService {
   Future<bool> acceptOffer({
     required int offerId,
     required String posterId,
+    String? posterPhone,
   }) async {
     final offerRow = await SupabaseService.client
         .from('errand_offers')
@@ -253,17 +257,25 @@ class DatabaseService {
       return false;
     }
 
-    await SupabaseService.client
+    final updatedErrand = await SupabaseService.client
         .from('errands')
         .update({
           'runner_id': offer.runnerId,
           'runner_name': offer.runnerName,
+          'runner_phone': offer.runnerPhone,
+          if (posterPhone != null && posterPhone.trim().isNotEmpty)
+            'poster_phone': posterPhone.trim(),
+          'status': 'Closed',
           'accepted_at': DateTime.now().toIso8601String(),
         })
         .eq('id', offer.errandId)
         .or('poster_id.eq.$posterId,user_id.eq.$posterId')
         .eq('status', 'Open')
-        .filter('runner_id', 'is', null);
+        .filter('runner_id', 'is', null)
+        .select('id')
+        .maybeSingle();
+
+    if (updatedErrand == null) return false;
 
     await SupabaseService.client
         .from('errand_offers')
